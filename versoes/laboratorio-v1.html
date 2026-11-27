@@ -1,0 +1,382 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}</style></head><body><title>Laboratório de Hunts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* layout: barra de abas; ao vivo = mapa grande com coluna de sessão; demais abas em blocos */
+:root{--bg:#eef1f7;--panel:#fff;--fg:#172038;--mut:#59647f;--line:#d3d9e8;--acc:#6b3fa8;--accfg:#fff;--good:#1f7a4a;--bad:#b3363f;--f:'Inter',system-ui,sans-serif;--d:'Space Grotesk','Inter',sans-serif;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1324;--panel:#171e35;--fg:#e8ebf6;--mut:#9aa4c2;--line:#2c3657;--acc:#a97be0;--accfg:#140c24;--good:#63d39a;--bad:#ff8088;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e1324;--panel:#171e35;--fg:#e8ebf6;--mut:#9aa4c2;--line:#2c3657;--acc:#a97be0;--accfg:#140c24;--good:#63d39a;--bad:#ff8088;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--f);padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:600 20px var(--d);margin:0}h2{font:600 15px var(--d);margin:0 0 8px}
+header,.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}header{justify-content:space-between;margin-bottom:12px}
+button,input,select,textarea{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;max-width:100%}
+button{cursor:pointer}button.on,button.pri{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+section.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.live{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px}
+@media(max-width:820px){.live{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;border-radius:10px;overflow:hidden;background:#0b1230}
+canvas{display:block;width:100%;height:min(62vh,560px)}
+.stats{display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-variant-numeric:tabular-nums}.stats span:nth-child(odd){color:var(--mut)}.stats span:nth-child(even){text-align:right;font-weight:600}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.log{font-size:12px;color:var(--mut);margin-top:8px;min-height:106px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px}
+@media(max-width:420px){.grid{grid-template-columns:minmax(0,1fr)}}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--mut);min-width:0}label input,label select{color:var(--fg);width:100%;box-sizing:border-box}
+label.chk{flex-direction:row;align-items:center;gap:6px}label.chk input{width:auto}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}
+th button{background:none;border:0;padding:0;font-weight:600}
+td input{width:70px}td input.w{width:130px}
+textarea{width:100%;box-sizing:border-box;font:12px ui-monospace,monospace;min-height:90px}
+.note{color:var(--mut);font-size:13px;margin:6px 0;max-width:75ch}
+.warn{border-left:3px solid var(--acc);padding:6px 10px;margin:0 0 12px}
+.best{color:var(--good);font-weight:700}.bad{color:var(--bad)}
+</style>
+<header><h1>Laboratório de Hunts</h1><nav class="row" id="tabs"></nav></header>
+<div class="note warn" id="warn">Versão 1, ainda não calibrada contra o seu Hunt Analyser. Os nomes e categorias dos golpes, os golpes do selvagem, o mapa e o tamanho da onda são estimativas editáveis.</div>
+
+<div id="v-live">
+ <div class="row" style="margin-bottom:8px">
+  <button id="play" class="pri">Pausar</button><span id="speeds" class="row"></span><button id="reset">Reiniciar</button><span id="clock" style="font-variant-numeric:tabular-nums"></span>
+ </div>
+ <div class="live">
+  <div class="col"><div class="stage"><canvas id="cv"></canvas></div><div class="log" id="log"></div></div>
+  <div class="col">
+   <section class="panel"><h2>Sessão</h2><div class="stats" id="stats"></div></section>
+   <section class="panel"><h2>Golpes</h2><div id="cds"></div></section>
+  </div>
+ </div>
+</div>
+
+<div id="v-cmp" hidden class="col">
+ <section class="panel"><h2>Cenários</h2>
+  <p class="note">Um cenário é uma foto de toda a configuração atual (pokémon, hunt, itens e bônus). Ajuste na aba Configurar, adicione, mude algo e adicione de novo.</p>
+  <div class="row"><input id="scName" placeholder="Nome do cenário"><button id="scAdd" class="pri">Adicionar configuração atual</button><button id="scPot">Criar um por tipo de poção</button></div>
+  <div id="scList" class="col" style="gap:6px;margin-top:10px"></div></section>
+ <section class="panel"><h2>Resultados por hora</h2>
+  <div class="row"><label>Horas simuladas<input type="number" id="hours" value="2" min="0.1" step="0.5"></label><label>Repetições<input type="number" id="reps" value="6" min="1"></label><button id="runCmp" class="pri">Simular todos</button><span id="prog" class="note"></span></div>
+  <div class="scroll" id="res" style="margin-top:10px"></div>
+  <p class="note">O ± é o desvio entre repetições. Se a diferença entre dois cenários for menor que ele, trate como empate. Os primeiros 90 s de cada repetição são descartados.</p></section>
+</div>
+
+<div id="v-cfg" hidden class="col">
+ <section class="panel"><h2>Importar ficha do pokémon</h2><textarea id="ficha" placeholder="Cole aqui a ficha em texto gerada pelo jogo"></textarea>
+  <div class="row" style="margin-top:6px"><button id="fichaBtn" class="pri">Importar ficha</button><span id="fichaMsg" class="note"></span></div></section>
+ <div class="grid" id="forms"></div>
+ <section class="panel"><h2>Salvar ou carregar configuração</h2><textarea id="json"></textarea>
+  <div class="row" style="margin-top:6px"><button id="exp">Mostrar e copiar atual</button><button id="imp">Carregar do texto</button><button id="def">Voltar ao padrão</button><span id="jsonMsg" class="note"></span></div></section>
+</div>
+
+<div id="v-cal" hidden class="col">
+ <section class="panel"><h2>Comparar com o jogo</h2>
+  <p class="note">No jogo, use Reset no painel Sessão, cace pelo menos 15 minutos e digite os valores por hora. Depois rode a comparação com a mesma configuração.</p>
+  <div class="fields"><label>Abates/h no jogo<input type="number" id="gk"></label><label>XP/h no jogo<input type="number" id="gx"></label><label>Gold/h no jogo<input type="number" id="gg"></label></div>
+  <div class="row" style="margin-top:8px"><button id="calRun" class="pri">Comparar</button></div><div class="scroll" id="calRes"></div></section>
+ <section class="panel"><h2>Importar mapa e ritmo do socket</h2>
+  <p class="note">Cole várias mensagens <code>"t":"campo"</code>, uma por linha. O simulador monta o mapa pelas posições vistas, usa os pontos onde os selvagens apareceram e ajusta o tamanho da onda e o passo deles. Quanto mais minutos, mais completo o mapa.</p>
+  <textarea id="campo"></textarea>
+  <div class="row" style="margin-top:6px"><button id="campoBtn" class="pri">Importar mensagens</button><label>Ou escolha o arquivo<input type="file" id="campoFile" accept=".txt,.json,.log"></label><button id="mapDel">Usar mapa aproximado</button></div><p class="note" id="campoMsg"></p>
+  <h2 style="margin-top:14px">Como capturar 3 minutos de mensagens</h2>
+  <p class="note">Com a hunt aberta, abra o console do navegador (F12), cole o código abaixo e aguarde. Ele só lê as mensagens recebidas e baixa um arquivo campo.txt. Leia antes de colar: não cole no console códigos que você não entende.</p>
+  <textarea id="snip" readonly></textarea><button id="copySnip">Copiar código</button></section>
+ <section class="panel"><h2>O que vem da wiki e o que é estimativa</h2><div class="scroll"><table id="src"></table></div></section>
+</div>
+<script>
+// Motor de simulação (puro, sem DOM). Roda na página, em Web Worker e no Node.
+function SimEngine(){
+const TYPES=['NORMAL','FIRE','WATER','GRASS','ELECTRIC','ICE','FIGHTING','POISON','GROUND','FLYING','PSYCHIC','BUG','ROCK','GHOST','DRAGON','DARK','STEEL','FAIRY'];
+// golpe:{tipo defensor:mult} — tabela da wiki
+const CH={NORMAL:{ROCK:.5,GHOST:0,STEEL:.5},FIRE:{FIRE:.5,WATER:.5,GRASS:2,ICE:2,BUG:2,ROCK:.5,DRAGON:.5,STEEL:2},
+WATER:{FIRE:2,WATER:.5,GRASS:.5,GROUND:2,ROCK:2,DRAGON:.5},GRASS:{FIRE:.5,WATER:2,GRASS:.5,POISON:.5,GROUND:2,FLYING:.5,BUG:.5,ROCK:2,DRAGON:.5,STEEL:.5},
+ELECTRIC:{WATER:2,GRASS:.5,ELECTRIC:.5,GROUND:0,FLYING:2,DRAGON:.5},ICE:{FIRE:.5,WATER:.5,GRASS:2,ICE:.5,GROUND:2,FLYING:2,DRAGON:2,STEEL:.5},
+FIGHTING:{NORMAL:2,ICE:2,POISON:.5,FLYING:.5,PSYCHIC:.5,BUG:.5,ROCK:2,GHOST:0,DARK:2,STEEL:2,FAIRY:.5},POISON:{GRASS:2,POISON:.5,GROUND:.5,ROCK:.5,GHOST:.5,STEEL:0,FAIRY:2},
+GROUND:{FIRE:2,GRASS:.5,ELECTRIC:2,POISON:2,FLYING:0,BUG:.5,ROCK:2,STEEL:2},FLYING:{GRASS:2,ELECTRIC:.5,FIGHTING:2,BUG:2,ROCK:.5,STEEL:.5},
+PSYCHIC:{FIGHTING:2,POISON:2,PSYCHIC:.5,DARK:0,STEEL:.5},BUG:{FIRE:.5,GRASS:2,FIGHTING:.5,POISON:.5,FLYING:.5,PSYCHIC:2,GHOST:.5,DARK:2,STEEL:.5,FAIRY:.5},
+ROCK:{FIRE:2,ICE:2,FIGHTING:.5,GROUND:.5,FLYING:2,BUG:2,STEEL:.5},GHOST:{NORMAL:0,PSYCHIC:2,GHOST:2,DARK:.5},DRAGON:{DRAGON:2,STEEL:.5,FAIRY:0},
+DARK:{FIGHTING:.5,PSYCHIC:2,GHOST:2,DARK:.5,FAIRY:.5},STEEL:{FIRE:.5,WATER:.5,ELECTRIC:.5,ICE:2,ROCK:2,STEEL:.5,FAIRY:2},FAIRY:{FIRE:.5,FIGHTING:2,POISON:.5,DRAGON:2,DARK:2,STEEL:.5}};
+const HUNT={'0':0,'0.25':.167,'0.5':.333,'1':1,'2':2.5,'4':5.5};
+function effect(t,def){let m=1;for(const d of def){if(!d)continue;const v=CH[t]&&CH[t][d];if(v!==undefined)m*=v;}return HUNT[String(m)];}
+const CDT=[[15,10],[40,15.9],[60,20.6],[80,25.3],[100,30],[120,31.2],[150,33],[300,42],[600,60]];
+function moveCd(p){if(p<=CDT[0][0])return CDT[0][1];for(let i=1;i<CDT.length;i++){if(p<=CDT[i][0]){const[a,b]=CDT[i-1],[c,d]=CDT[i];return b+(d-b)*(p-a)/(c-a);}}return 60;}
+function speedDiscount(base,iv){let pot=base<=120?base/20:6+(base-120)/40;return Math.min(7,pot)*iv/32/100;}
+const POT=P=>({1:1,2:1.05,3:1.1,4:1.25,5:2})[P]||1;
+function stats(p){const o={};const mult=POT(p.potency)*(p.shiny?3:1)*(p.legendary?4:1);
+ for(const k of ['hp','atk','def','spa','spd','spe']){const ex=(k==='hp'||k==='spe')?.95:.8;
+  o[k]=Math.round((p.base[k]+((p.refine&&p.refine[k])||0)+2*p.iv[k])*p.level/100*Math.pow(p.quality,ex)*mult);}
+ o.maxHp=Math.max(24,Math.round(o.hp*12));return o;}
+const xpTotal=L=>Math.round(50/3*(L*L*L-6*L*L+17*L-12));
+const POTIONS=[{id:'small',n:'Small Potion',heal:60,price:50},{id:'great',n:'Great Potion',heal:150,price:150},{id:'ultra',n:'Ultra Potion',heal:400,price:400},{id:'hyper',n:'Hyper Potion',heal:1000,price:800},{id:'ultimate',n:'Ultimate Potion',heal:3000,price:1500},{id:'golden',n:'Golden Potion',pct:.5,price:2500}];
+const REVIVES={revive:{n:'Revive',pct:.1,price:600},max:{n:'Max Revive',pct:1,price:5000}};
+const GOLD=[[1,36,5],[100,572,86],[1000,2282,342],[5000,6000,900],[25000,15776,2366],[160300,15776,15905]];
+function goldFor(L){for(let i=1;i<GOLD.length;i++){if(L<=GOLD[i][0]){const a=GOLD[i-1],b=GOLD[i];const t=(Math.log(Math.max(1,L))-Math.log(a[0]))/(Math.log(b[0])-Math.log(a[0]));
+ const f=j=>Math.round(a[j]*Math.pow(b[j]/a[j],t));return{curve:f(1),loot:f(2)};}}return{curve:15776,loot:15905};}
+function rng(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+
+// Mapa aproximado (corredores) ou importado das mensagens "campo"
+function genMap(seed,W,H){const r=rng(seed),g=new Uint8Array(W*H);
+ const dig=(x,y,rad)=>{for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++){const X=x+dx,Y=y+dy;if(X>0&&Y>0&&X<W-1&&Y<H-1&&dx*dx+dy*dy<=rad*rad+1)g[Y*W+X]=1;}};
+ const pts=[[.12,.25],[.38,.18],[.62,.30],[.86,.20],[.84,.70],[.60,.80],[.45,.52],[.18,.72]].map(p=>[Math.round(p[0]*W),Math.round(p[1]*H)]);
+ const links=pts.map((p,i)=>[p,pts[(i+1)%pts.length]]);links.push([pts[2],pts[6]],[pts[6],pts[0]]);
+ for(const[a,b]of links){const n=Math.max(Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1]));let w=2+Math.floor(r()*2);
+  for(let i=0;i<=n;i++){if(i%6===0)w=2+Math.floor(r()*2);const t=i/n,j=Math.sin(t*Math.PI*3)*2;dig(Math.round(a[0]+(b[0]-a[0])*t),Math.round(a[1]+(b[1]-a[1])*t+j),w);}}
+ for(const p of pts)dig(p[0],p[1],4);
+ return{W,H,g,spawns:null};}
+function parseCampo(text){const msgs=[];const push=(o,d=0)=>{if(!o||typeof o!=='object'||d>4)return;if(o.t==='campo'&&Array.isArray(o.mobs))msgs.push(o);else Object.values(o).forEach(v=>push(v,d+1));};
+ try{push(JSON.parse(text));}catch(e){for(const line of text.split('\n')){const i=line.indexOf('{'),j=line.lastIndexOf('}');if(i<0)continue;try{push(JSON.parse(line.slice(i,j+1)));}catch(_){}}}
+ msgs.sort((a,b)=>a.ts-b.ts);return msgs;}
+function importCampo(text){const msgs=parseCampo(text);if(!msgs.length)return null;
+ const cells=[],spawns=[],seen=new Set();let maxAlive=0,ms=[],minC=1e9,minR=1e9,maxC=-1e9,maxR=-1e9;
+ for(const m of msgs){let alive=0;for(const b of m.mobs){if(b.hp>0&&!b.x)alive++;if(b.ms)ms.push(b.ms);
+  for(const[c,r]of[[b.c,b.r],[b.dc,b.dr]]){if(c==null)continue;cells.push([c,r]);minC=Math.min(minC,c);maxC=Math.max(maxC,c);minR=Math.min(minR,r);maxR=Math.max(maxR,r);}
+  if(!seen.has(b.s)){seen.add(b.s);spawns.push([b.c,b.r]);}}maxAlive=Math.max(maxAlive,alive);}
+ const pad=4,W=maxC-minC+1+pad*2,H=maxR-minR+1+pad*2,g=new Uint8Array(W*H);
+ const set=(x,y)=>{if(x>=0&&y>=0&&x<W&&y<H)g[y*W+x]=1;};
+ const P=cells.map(([c,r])=>[c-minC+pad,r-minR+pad]);
+ for(const[x,y]of P)for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)set(x+dx,y+dy);
+ // liga ilhas para que tudo seja alcançável
+ for(;;){const comp=new Int32Array(W*H).fill(-1);const comps=[];for(let i=0;i<W*H;i++){if(!g[i]||comp[i]>=0)continue;const q=[i];comp[i]=comps.length;for(let k=0;k<q.length;k++){const c=q[k],x=c%W,y=(c/W)|0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const X=x+dx,Y=y+dy,n=Y*W+X;if(X>=0&&Y>=0&&X<W&&Y<H&&g[n]&&comp[n]<0){comp[n]=comps.length;q.push(n);}}}comps.push(q);}
+  if(comps.length<2)break;let best=null;for(const a of comps[0])for(let j=1;j<comps.length;j++)for(const b of comps[j]){const d=Math.max(Math.abs(a%W-b%W),Math.abs(((a/W)|0)-((b/W)|0)));if(!best||d<best.d)best={d,a,b};}
+  let x=best.a%W,y=(best.a/W)|0;const tx=best.b%W,ty=(best.b/W)|0;while(x!==tx||y!==ty){x+=Math.sign(tx-x);y+=Math.sign(ty-y);set(x,y);set(x+1,y);}}
+ ms.sort((a,b)=>a-b);
+ return{map:{W,H,g:Array.from(g),spawns:spawns.map(([c,r])=>[c-minC+pad,r-minR+pad])},waveSize:maxAlive,mobStepMs:ms.length?ms[ms.length>>1]:520,messages:msgs.length,mobs:seen.size,seconds:(msgs[msgs.length-1].ts-msgs[0].ts)/1000};}
+
+const DIRS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+function create(cfg,seed){
+ const R=rng(seed),P=cfg.pokemon,H=cfg.hunt,S=cfg.sim;
+ const map=H.map?H.map:genMap(H.mapSeed||7,H.mapW||72,H.mapH||44);const W=map.W,Hh=map.H,g=map.g;
+ const walk=[];for(let i=0;i<W*Hh;i++)if(g[i])walk.push(i);
+ let level=P.level,st=stats(P),pxp=xpTotal(level),txp=xpTotal(cfg.trainer.level),tlevel=cfg.trainer.level;
+ const day=cfg.seasonal||'';
+ const dayMult=(a,d)=>{if(!day)return 1;const x=a.includes(day),y=d.includes(day);return x&&y?.5:x?2:y?.25:1;};
+ const ptypes=P.types.filter(Boolean),wtypes=H.types.filter(Boolean);
+ const disc=speedDiscount(P.base.spe,P.iv.spe),gap=Math.max(400,S.attackGapMs-10*P.iv.spe),basicCd=Math.max(400,S.basicCdMs-10*P.iv.spe);
+ const moves=P.moves.filter(m=>m.on!==false&&m.power>0).map(m=>({...m,cd:moveCd(m.power)*(1-disc)*1000,ready:0,uses:0}));
+ let t=0,nid=1,mobs=[],corpses=[],waveAt=0,log=[],fx=[];
+ const start=walk[Math.floor(R()*walk.length)];
+ const hero={cell:start,from:start,moveStart:0,moveEnd:0,hp:st.maxHp,nextAtk:0,basicAt:0,target:0,potAt:0,downUntil:0};
+ const dist=new Int32Array(W*Hh),parent=new Int32Array(W*Hh),Q=new Int32Array(W*Hh);let distFor=-1;
+ function bfs(src){if(distFor===src)return;distFor=src;dist.fill(-1);dist[src]=0;parent[src]=src;Q[0]=src;let h=0,n=1;
+  while(h<n){const c=Q[h++],x=c%W,y=(c/W)|0;for(const[dx,dy]of DIRS){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=W||Y>=Hh)continue;const k=Y*W+X;if(!g[k]||dist[k]>=0)continue;dist[k]=dist[c]+1;parent[k]=c;Q[n++]=k;}}}
+ const cheb=(a,b)=>Math.max(Math.abs(a%W-b%W),Math.abs(((a/W)|0)-((b/W)|0)));
+ const M={kills:0,xp:0,txp:0,gold:0,potionCost:0,reviveCost:0,deaths:0,xpLost:0,waves:0,skills:0,basics:0,dmgTaken:0,dmgDone:0,walkMs:0,fightMs:0,waitMs:0,downMs:0,used:{},stopped:false,levelUps:0};
+ const stock={};for(const p of POTIONS)stock[p.id]=cfg.items.potions[p.id]&&cfg.items.potions[p.id].on?(cfg.items.potions[p.id].qty??Infinity):0;
+ if(cfg.items.unlimited)for(const p of POTIONS)if(cfg.items.potions[p.id].on)stock[p.id]=Infinity;
+ let revives=cfg.items.unlimited?Infinity:cfg.items.reviveQty;
+ const say=s=>{log.push({t,s});if(log.length>6)log.shift();};
+ function spawnWave(){M.waves++;const n=H.waveSize,packs=Math.max(1,H.packs);
+  const pool=map.spawns&&map.spawns.length?map.spawns.map(([x,y])=>y*W+x):walk;
+  const centers=[];for(let i=0;i<packs;i++){let c,k=0;do{c=pool[Math.floor(R()*pool.length)];k++;}while(k<30&&(cheb(c,hero.cell)<H.minSpawnDist||centers.some(o=>cheb(o,c)<8)));centers.push(c);}
+  for(let i=0;i<n;i++){const ctr=centers[i%packs];let c=ctr;for(let k=0;k<30;k++){const x=ctr%W+Math.floor(R()*7)-3,y=((ctr/W)|0)+Math.floor(R()*7)-3;if(x>=0&&y>=0&&x<W&&y<Hh&&g[y*W+x]&&!mobs.some(m=>m.cell===y*W+x)){c=y*W+x;break;}}
+   const iv={};for(const k of ['hp','atk','def','spa','spd','spe'])iv[k]=1+Math.floor(R()*32);
+   const s=stats({base:H.base,iv,level:H.level,quality:H.quality,potency:1});const maxHp=s.maxHp*S.wildHpMult;
+   mobs.push({id:nid++,cell:c,from:c,moveStart:t,moveEnd:t,s,iv,hp:maxHp,maxHp,nextAtk:0,ready:H.moves.map(()=>0),aggro:false});}}
+ function dmg(level,power,atk,def,stab,eff){const base=((2*level/5+2)*power*atk/def)/50+2;return base*stab*eff;}
+ function expected(mv,m){const phys=mv.cat==='P';return dmg(level,mv.power,phys?st.atk:st.spa,phys?m.s.def:m.s.spd,ptypes.includes(mv.type)?1.5:1,effect(mv.type,wtypes))*dayMult(ptypes,wtypes);}
+ function heroAttack(m){let best=null,bv=0;for(const mv of moves){if(mv.ready>t)continue;const e=expected(mv,m);if(e>bv){bv=e;best=mv;}}
+  let name,type;
+  if(!best){if(t<hero.basicAt)return;type=ptypes.find(ty=>effect(ty,wtypes)>0);if(!type)return;bv=expected({type,power:30,cat:'P'},m);name='Investida';hero.basicAt=t+basicCd;M.basics++;}
+  else{best.ready=t+best.cd;best.uses++;name=best.name;type=best.type;M.skills++;}
+  const d=Math.max(1,Math.round(bv*(.85+R()*.15)));m.hp-=d;M.dmgDone+=Math.min(d,d+m.hp);hero.nextAtk=t+gap;m.aggro=true;fx.push({t,cell:m.cell,d,type,mine:true});
+  if(S.aoe){for(const o of mobs)if(o!==m&&cheb(o.cell,hero.cell)<=5){o.hp-=d;}}
+  for(let i=mobs.length-1;i>=0;i--)if(mobs[i].hp<=0)kill(i);}
+ function kill(i){const m=mobs[i];mobs.splice(i,1);corpses.push({cell:m.cell,until:t+30000});if(hero.target===m.id)hero.target=0;
+  M.kills++;const gold=H.goldCurve+Math.round(H.lootBonus*cfg.bonus.loot);const xp=Math.round(H.xpPerKill*cfg.bonus.xpMult),tx=Math.round(H.xpPerKill*cfg.bonus.xpMult*(cfg.bonus.trainerRatio??1));
+  M.gold+=gold;M.xp+=xp;M.txp+=tx;pxp+=xp;txp+=tx;
+  while(txp>=xpTotal(tlevel+1))tlevel++;
+  let up=false;while(pxp>=xpTotal(level+1)){level++;up=true;M.levelUps++;}
+  if(up){st=stats({...P,level});hero.hp=st.maxHp;say('Subiu para o Nv '+level);}
+  say(H.species+' derrotado! +'+xp.toLocaleString('pt-BR')+' xp, +'+gold.toLocaleString('pt-BR')+' ouro');}
+ function usePotion(){if(!cfg.items.autoPotion||t<hero.potAt||hero.hp<=0||hero.hp>=st.maxHp*cfg.items.threshold)return;
+  for(const p of POTIONS){if(stock[p.id]>0){stock[p.id]--;hero.hp=Math.min(st.maxHp,hero.hp+(p.pct?Math.round(st.maxHp*p.pct):p.heal));M.potionCost+=p.price;M.used[p.id]=(M.used[p.id]||0)+1;hero.potAt=t+S.potionCdMs;return;}}}
+ function faint(){M.deaths++;const lost=Math.round((xpTotal(tlevel+1)-xpTotal(tlevel))*cfg.bonus.deathLoss);M.xpLost+=lost;txp=Math.max(0,txp-lost);while(tlevel>1&&txp<xpTotal(tlevel))tlevel--;
+  if(cfg.items.autoRevive&&revives>0){const rv=REVIVES[cfg.items.reviveType];revives--;M.reviveCost+=rv.price;M.used[cfg.items.reviveType]=(M.used[cfg.items.reviveType]||0)+1;hero.hp=Math.max(1,Math.round(st.maxHp*rv.pct));say('Desmaiou — '+rv.n+' usado');hero.potAt=t;usePotion();return;}
+  const has=revives>0||Object.values(stock).some(v=>v>0);mobs=[];corpses=[];hero.target=0;
+  if(cfg.items.autoReturn&&has){hero.downUntil=t+S.returnMs;say('Time caiu — voltando do Centro');}else{M.stopped=true;say('Time caiu — hunt encerrada');}}
+ function tick(){const dt=S.tickMs;t+=dt;
+  if(M.stopped){M.downMs+=dt;return;}
+  if(hero.downUntil){M.downMs+=dt;if(t<hero.downUntil)return;hero.downUntil=0;hero.hp=st.maxHp;waveAt=t;}
+  while(corpses.length&&corpses[0].until<=t)corpses.shift();
+  if(fx.length&&fx[0].t<t-1500)fx.shift();
+  if(!mobs.length){if(waveAt<0)waveAt=t+S.waveDelayMs;if(t>=waveAt){spawnWave();waveAt=-1;}else{M.waitMs+=dt;usePotion();return;}}
+  bfs(hero.cell);
+  let target=mobs.find(m=>m.id===hero.target);
+  if(!target||(cheb(target.cell,hero.cell)>1&&t>=hero.moveEnd)){let bd=1e9;for(const m of mobs){const d=dist[m.cell];if(d>=0&&d<bd){bd=d;target=m;}}hero.target=target?target.id:0;}
+  // selvagens andam
+  for(const m of mobs){if(t<m.moveEnd)continue;const d=dist[m.cell];if(!m.aggro&&d>=0&&d<=H.aggro)m.aggro=true;
+   if(cheb(m.cell,hero.cell)<=1)continue;let nx=-1;
+   if(m.aggro&&d>1){const p=parent[m.cell];if(p!==hero.cell&&!mobs.some(o=>o.cell===p))nx=p;
+    else{let bd=d;for(const[dx,dy]of DIRS){const x=m.cell%W+dx,y=((m.cell/W)|0)+dy,k=y*W+x;if(x>=0&&y>=0&&x<W&&y<Hh&&g[k]&&dist[k]>0&&dist[k]<=bd&&!mobs.some(o=>o.cell===k)){bd=dist[k];nx=k;}}}}
+   else if(!m.aggro&&R()<H.wander*dt/1000){const[dx,dy]=DIRS[Math.floor(R()*8)];const x=m.cell%W+dx,y=((m.cell/W)|0)+dy,k=y*W+x;if(x>=0&&y>=0&&x<W&&y<Hh&&g[k]&&k!==hero.cell&&!mobs.some(o=>o.cell===k))nx=k;}
+   if(nx>=0){m.from=m.cell;m.cell=nx;m.moveStart=t;m.moveEnd=t+H.mobStepMs;}}
+  // meu pokemon
+  let engaged=false;
+  if(target){if(cheb(target.cell,hero.cell)<=1){if(t>=hero.moveEnd){engaged=true;M.fightMs+=dt;if(t>=hero.nextAtk)heroAttack(target);}else M.walkMs+=dt;}
+   else{M.walkMs+=dt;if(t>=hero.moveEnd){let c=target.cell;while(parent[c]!==hero.cell&&c!==hero.cell)c=parent[c];if(c!==hero.cell){hero.from=hero.cell;hero.cell=c;hero.moveStart=t;hero.moveEnd=t+S.heroStepMs/(1+cfg.bonus.bike);}}}}
+  // selvagens atacam
+  for(const m of mobs){if(t<m.nextAtk||t<m.moveEnd||cheb(m.cell,hero.cell)>1)continue;
+   let bi=-1,bv=0;for(let i=0;i<H.moves.length;i++){const mv=H.moves[i];if(m.ready[i]>t)continue;const basic=mv.basic;const phys=basic||mv.cat==='P';
+    const v=dmg(H.level,mv.power,phys?m.s.atk:m.s.spa,phys?st.def:st.spd,wtypes.includes(mv.type)?1.5:1,effect(mv.type,ptypes))*dayMult(wtypes,ptypes);
+    const rank=basic?v*1e-9:v;if(rank>bv){bv=rank;bi=i;m._v=v;}}
+   if(bi<0)continue;const mv=H.moves[bi];const w=speedDiscount(H.base.spe,m.iv.spe);m.ready[bi]=t+(mv.basic?S.basicCdMs-10*m.iv.spe:moveCd(mv.power)*1000*(1-w));
+   m.nextAtk=t+S.wildGapMs;const d=Math.max(1,Math.round(m._v*S.wildDmgMult*(.85+R()*.15)));hero.hp-=d;M.dmgTaken+=d;fx.push({t,cell:hero.cell,d,type:mv.type,mine:false});
+   if(hero.hp<=0){hero.hp=0;faint();return;}}
+  usePotion();}
+ return{tick,map,hero,get mobs(){return mobs;},get corpses(){return corpses;},get t(){return t;},get level(){return level;},get tlevel(){return tlevel;},get st(){return st;},M,log,fx,moves,stock,
+  run(ms){const end=t+ms;while(t<end)tick();}};
+}
+function snapshot(s){return JSON.parse(JSON.stringify(s.M));}
+// roda uma repetição e devolve taxas por hora (descontando o aquecimento)
+function evaluate(cfg,seed,hours,warmMs){const s=create(cfg,seed);s.run(warmMs);const a=snapshot(s);s.run(hours*3600000);const b=s.M,h=hours;
+ const d=k=>(b[k]-a[k])/h;const cost=d('potionCost')+d('reviveCost');const tot=h*3600000;
+ return{xp:d('xp'),txpNet:d('txp')-d('xpLost'),gold:d('gold'),cost,profit:d('gold')-cost,kills:d('kills'),deaths:d('deaths'),skills:d('skills'),basics:d('basics'),
+  pots:POTIONS.reduce((n,p)=>n+((b.used[p.id]||0)-(a.used[p.id]||0)),0)/h,walk:(b.walkMs-a.walkMs)/tot,fight:(b.fightMs-a.fightMs)/tot,stopped:b.stopped};}
+return{TYPES,POTIONS,REVIVES,effect,moveCd,speedDiscount,stats,xpTotal,goldFor,genMap,parseCampo,importCampo,create,evaluate};
+}
+
+function defaultConfig(){
+ const mv=(name,type,power)=>({name,type,power,cat:'S',on:true});
+ return{
+ pokemon:{name:'Venusaur',types:['GRASS','POISON'],level:1651,potency:4,quality:1.521,shiny:false,legendary:false,
+  base:{hp:80,atk:82,def:83,spa:100,spd:100,spe:80},iv:{hp:15,atk:8,def:29,spa:30,spd:26,spe:9},refine:{},
+  moves:[mv('Planta 1','GRASS',25),mv('Planta 2','GRASS',40),mv('Veneno 1','POISON',50),mv('Planta 3','GRASS',65),mv('Planta 4','GRASS',75),mv('Planta 5','GRASS',80),mv('Planta 6','GRASS',90),mv('Veneno 2','POISON',120),mv('Planta 7','GRASS',120),mv('Planta 8','GRASS',150),mv('Planta 9','GRASS',150),mv('Planta 600','GRASS',600),mv('Veneno 600','POISON',600)]},
+ trainer:{level:1650},
+ hunt:{species:'Buizel',level:1000,types:['WATER'],base:{hp:55,atk:65,def:35,spa:60,spd:30,spe:85},quality:1,
+  xpPerKill:626372,goldCurve:2282,lootBonus:342,
+  waveSize:10,packs:3,minSpawnDist:5,aggro:9,wander:0.3,mobStepMs:520,mapSeed:7,mapW:60,mapH:36,map:null,
+  moves:[{name:'Investida',type:'WATER',power:30,cat:'P',basic:true},{name:'Água 60',type:'WATER',power:60,cat:'S'},{name:'Água 80',type:'WATER',power:80,cat:'S'},{name:'Gelo 110',type:'ICE',power:110,cat:'P'}]},
+ bonus:{xpMult:1,trainerRatio:1,loot:1.25,bike:0,deathLoss:0.1},
+ items:{autoPotion:true,threshold:0.3,unlimited:true,autoRevive:true,reviveType:'revive',reviveQty:100,autoReturn:true,
+  potions:{small:{on:false,qty:0},great:{on:false,qty:0},ultra:{on:false,qty:0},hyper:{on:false,qty:0},ultimate:{on:false,qty:0},golden:{on:true,qty:500}}},
+ seasonal:'',
+ sim:{tickMs:50,heroStepMs:260,attackGapMs:900,basicCdMs:2000,wildGapMs:1400,wildHpMult:5,wildDmgMult:1.8,waveDelayMs:2500,potionCdMs:1000,returnMs:8000,aoe:false}
+ };}
+
+const E=SimEngine();
+const $=id=>document.getElementById(id);
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const clone=o=>JSON.parse(JSON.stringify(o,(k,v)=>v===Infinity?null:v));
+function merge(d,s){if(s===undefined)return d;if(Array.isArray(d)||d===null||typeof d!=='object')return s;const o={...d};for(const k in s)o[k]=k in d?merge(d[k],s[k]):s[k];return o;}
+let cfg=merge(defaultConfig(),store.get('cfg')||undefined),scen=store.get('scen')||[];
+const fmt=n=>!isFinite(n)?'–':Math.abs(n)>=1e9?(n/1e9).toLocaleString('pt-BR',{maximumFractionDigits:3})+' bi':Math.abs(n)>=1e6?(n/1e6).toLocaleString('pt-BR',{maximumFractionDigits:2})+' mi':Math.round(n).toLocaleString('pt-BR');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function dirty(){store.set('cfg',cfg);restart();}
+// abas
+const TABS=[['live','Ao vivo'],['cmp','Comparar'],['cfg','Configurar'],['cal','Calibrar']];
+$('tabs').innerHTML=TABS.map(([k,n])=>`<button data-t="${k}">${n}</button>`).join('');
+function show(k){for(const[t]of TABS){$('v-'+t).hidden=t!==k;document.querySelector(`[data-t="${t}"]`).classList.toggle('on',t===k);}}
+$('tabs').onclick=e=>{const k=e.target.dataset.t;if(k)show(k);};
+// ao vivo
+let sim,speed=1,playing=true,seed=1,cam=null,acc=0,last=0,ui=0;
+function restart(){try{sim=E.create(cfg,seed);cam=null;acc=0;ui=0;}catch(e){$('log').textContent='Configuração inválida: '+e.message;}}
+$('speeds').innerHTML=[1,2,5,10,30,100,500].map(v=>`<button data-s="${v}" class="${v===1?'on':''}">${v}×</button>`).join('');
+$('speeds').onclick=e=>{if(!e.target.dataset.s)return;speed=+e.target.dataset.s;[...$('speeds').children].forEach(b=>b.classList.toggle('on',b===e.target));};
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pausar':'Continuar';};
+$('reset').onclick=()=>{seed++;restart();};
+const cv=$('cv'),cx=cv.getContext('2d');
+const TC={NORMAL:'#b9b9a8',FIRE:'#f08030',WATER:'#4aa3f0',GRASS:'#62c852',ELECTRIC:'#f5d130',ICE:'#8fe0e0',FIGHTING:'#d0453a',POISON:'#b05ac0',GROUND:'#d8b860',FLYING:'#a8a0f0',PSYCHIC:'#f06090',BUG:'#a8b820',ROCK:'#b8a038',GHOST:'#8068a8',DRAGON:'#7848f0',DARK:'#807060',STEEL:'#b8b8d0',FAIRY:'#f0a0c0'};
+function draw(){const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(!w)return;if(cv.width!==Math.round(w*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+ cx.setTransform(dpr,0,0,dpr,0,0);const T=w<500?20:28,m=sim.map,t=sim.t;
+ const pos=a=>{const k=a.moveEnd>a.moveStart?Math.min(1,Math.max(0,(t-a.moveStart)/(a.moveEnd-a.moveStart))):1;const x0=a.from%m.W,y0=(a.from/m.W)|0,x1=a.cell%m.W,y1=(a.cell/m.W)|0;return[(x0+(x1-x0)*k+.5)*T,(y0+(y1-y0)*k+.5)*T];};
+ const hp=pos(sim.hero);if(!cam||speed>10)cam=hp.slice();else{cam[0]+=(hp[0]-cam[0])*.15;cam[1]+=(hp[1]-cam[1])*.15;}
+ const ox=Math.round(w/2-cam[0]),oy=Math.round(h/2-cam[1]);cx.fillStyle='#070b1d';cx.fillRect(0,0,w,h);cx.save();cx.translate(ox,oy);
+ for(let y=Math.max(0,Math.floor(-oy/T));y<Math.min(m.H,Math.ceil((h-oy)/T));y++)for(let x=Math.max(0,Math.floor(-ox/T));x<Math.min(m.W,Math.ceil((w-ox)/T));x++){
+  const k=y*m.W+x,n=(x*73856093^y*19349663)>>>0;if(m.g[k]){cx.fillStyle=(x+y)%2?'#16255a':'#182861';cx.fillRect(x*T,y*T,T,T);if(n%17===0){cx.fillStyle='#1f4a52';cx.fillRect(x*T+7,y*T+9,3,T-14);cx.fillRect(x*T+13,y*T+5,3,T-10);}}
+  else{cx.fillStyle=n%3?'#0d1331':'#101739';cx.fillRect(x*T,y*T,T,T);if(m.g[k+m.W]){cx.fillStyle='#2a3566';cx.fillRect(x*T,y*T+T-6,T,6);}}}
+ cx.textAlign='center';cx.font='600 11px Inter,system-ui,sans-serif';
+ for(const c of sim.corpses){const x=(c.cell%m.W+.5)*T,y=(((c.cell/m.W)|0)+.5)*T;cx.globalAlpha=.45;cx.fillStyle='#8a93b8';cx.beginPath();cx.ellipse(x,y+4,T*.35,T*.18,0,0,7);cx.fill();cx.globalAlpha=1;}
+ const unit=(p,col,r,name,frac,bold)=>{cx.fillStyle='#0006';cx.beginPath();cx.ellipse(p[0],p[1]+r*.7,r,r*.4,0,0,7);cx.fill();cx.fillStyle=col;cx.beginPath();cx.arc(p[0],p[1],r,0,7);cx.fill();cx.fillStyle='#0b1020';cx.fillText(name[0],p[0],p[1]+4);
+  cx.fillStyle=bold?'#fff':'#aeb6d6';cx.fillText(name,p[0],p[1]-r-10);cx.fillStyle='#000a';cx.fillRect(p[0]-18,p[1]-r-7,36,4);cx.fillStyle=frac>.5?'#4ee08a':frac>.2?'#f2c14e':'#ff6b6b';cx.fillRect(p[0]-18,p[1]-r-7,36*Math.max(0,frac),4);};
+ for(const o of sim.mobs){unit(pos(o),TC[cfg.hunt.types[0]]||'#ccc',T*.32,cfg.hunt.species+' Nv'+cfg.hunt.level,o.hp/o.maxHp,o.id===sim.hero.target);}
+ if(!sim.M.stopped&&!sim.hero.downUntil)unit(hp,TC[cfg.pokemon.types[0]]||'#ccc',T*.55,cfg.pokemon.name+' Nv'+sim.level,sim.hero.hp/sim.st.maxHp,true);
+ cx.font='700 13px Inter,system-ui,sans-serif';for(const f of sim.fx){const a=(t-f.t)/900;if(a>1||speed>10)continue;cx.globalAlpha=1-a;cx.fillStyle=f.mine?TC[f.type]:'#ff6b6b';cx.fillText('-'+fmt(f.d),(f.cell%m.W+.5)*T+(f.mine?14:-14),(((f.cell/m.W)|0)+.5)*T-a*22);cx.globalAlpha=1;}
+ cx.restore();
+ if(sim.M.stopped||sim.hero.downUntil){cx.fillStyle='#fff';cx.textAlign='center';cx.font='600 16px Inter,system-ui';cx.fillText(sim.M.stopped?'Hunt encerrada: sem revive ou poção':'No Centro Pokémon…',w/2,h/2);}}
+function panels(){const M=sim.M,h=sim.t/3600000,r=v=>h>0?fmt(v/h):'–',cost=M.potionCost+M.reviveCost,tot=sim.t||1;
+ const s=sim.t/1000|0;$('clock').textContent=`${String(s/3600|0).padStart(2,'0')}:${String((s/60|0)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')} simulados`;
+ const rows=[['XP pokémon /h',r(M.xp)],['XP treinador /h (líquido)',r(M.txp-M.xpLost)],['Gold /h',r(M.gold)],['Custo de itens /h',r(cost)],['Lucro /h',r(M.gold-cost)],['Abates /h',r(M.kills)],['Abates',fmt(M.kills)],['Gold total',fmt(M.gold)],['Poções gastas',fmt(E.POTIONS.reduce((n,p)=>n+(M.used[p.id]||0),0))],['Mortes',M.deaths],['XP perdido',fmt(M.xpLost)],['HP',fmt(sim.hero.hp)+' / '+fmt(sim.st.maxHp)],['Tempo andando',Math.round(M.walkMs/tot*100)+'%'],['Tempo em luta',Math.round(M.fightMs/tot*100)+'%'],['Esperando onda',Math.round(M.waitMs/tot*100)+'%']];
+ $('stats').innerHTML=rows.map(([a,b])=>`<span>${a}</span><span>${b}</span>`).join('');
+ $('log').innerHTML=sim.log.map(l=>`<div>${esc(l.s)}</div>`).join('');
+ $('cds').innerHTML=sim.moves.map(v=>{const k=Math.min(1,1-Math.max(0,v.ready-sim.t)/v.cd);return `<div style="display:grid;grid-template-columns:1fr 70px 34px;gap:6px;align-items:center;font-size:12px"><span>${esc(v.name)}</span><span style="height:6px;border-radius:3px;background:linear-gradient(90deg,${TC[v.type]} ${k*100}%,var(--line) 0)"></span><span style="text-align:right">${v.uses}</span></div>`}).join('');}
+function frame(now){const dt=Math.min(100,now-last||16);last=now;if(playing&&sim&&!$('v-live').hidden){acc+=dt*speed;const tk=cfg.sim.tickMs;const start=performance.now();while(acc>=tk){sim.tick();acc-=tk;if(performance.now()-start>30){acc=0;break;}}}
+ if(sim&&!$('v-live').hidden){draw();if(now-ui>200){ui=now;panels();}}requestAnimationFrame(frame);}
+// comparação
+function renderScen(){$('scList').innerHTML=scen.length?scen.map((s,i)=>`<div class="row"><strong>${esc(s.name)}</strong><span class="note">${esc(s.cfg.pokemon.name)} × ${esc(s.cfg.hunt.species)} ${s.cfg.hunt.level}</span><button data-l="${i}">Abrir</button><button data-d="${i}">Remover</button></div>`).join(''):'<p class="note">Nenhum cenário ainda. Sem cenários, a simulação usa a configuração atual.</p>';}
+$('scList').onclick=e=>{const d=e.target.dataset;if(d.d!==undefined){scen.splice(+d.d,1);store.set('scen',scen);renderScen();}if(d.l!==undefined){cfg=merge(defaultConfig(),clone(scen[+d.l].cfg));forms();dirty();show('live');}};
+const autoName=c=>`${c.pokemon.name} × ${c.hunt.species} ${c.hunt.level}`;
+$('scAdd').onclick=()=>{scen.push({name:$('scName').value||autoName(cfg)+' #'+(scen.length+1),cfg:clone(cfg)});$('scName').value='';store.set('scen',scen);renderScen();};
+$('scPot').onclick=()=>{for(const p of E.POTIONS){const c=clone(cfg);for(const q of E.POTIONS)c.items.potions[q.id].on=q.id===p.id;c.items.autoPotion=true;scen.push({name:autoName(c)+' · '+p.n,cfg:c});}store.set('scen',scen);renderScen();};
+function runJobs(jobs,onDone){return new Promise(res=>{let next=0,done=0;const local=()=>{const step=()=>{if(next>=jobs.length)return;const j=jobs[next++];onDone(j,E.evaluate(j.cfg,j.seed,j.hours,90000));if(++done===jobs.length)res();else setTimeout(step,0);};setTimeout(step,20);};
+ let ws=[];try{const src=SimEngine.toString()+';const E=SimEngine();onmessage=e=>{const j=e.data;try{postMessage({i:j.i,r:E.evaluate(j.cfg,j.seed,j.hours,90000)})}catch(x){postMessage({i:j.i,err:x.message})}}';const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+  const n=Math.min(jobs.length,Math.max(1,(navigator.hardwareConcurrency||4)-1));let failed=false;
+  const feed=w=>{if(next>=jobs.length){w.terminate();return;}const i=next++;w.postMessage({...jobs[i],i});};
+  for(let k=0;k<n;k++){const w=new Worker(url);ws.push(w);w.onmessage=e=>{if(failed)return;onDone(jobs[e.data.i],e.data.r,e.data.err);if(++done===jobs.length){ws.forEach(x=>x.terminate());res();}else feed(w);};
+   w.onerror=ev=>{ev.preventDefault();if(failed)return;failed=true;ws.forEach(x=>x.terminate());next=done;local();};feed(w);}}catch(e){ws.forEach(x=>x.terminate());next=0;done=0;local();}});}
+const COLS=[['xp','XP poké/h'],['txpNet','XP trein./h'],['gold','Gold/h'],['cost','Itens/h'],['profit','Lucro/h'],['kills','Abates/h'],['pots','Poções/h'],['deaths','Mortes/h']];
+let results=[],sortKey='xp';
+function renderRes(){if(!results.length){$('res').innerHTML='';return;}const rows=results.filter(r=>r.runs.length).map(r=>{const o={name:r.name,sd:{},stopped:r.runs.filter(x=>x.stopped).length,n:r.runs.length};for(const[k]of COLS){const v=r.runs.map(x=>x[k]),m=v.reduce((a,b)=>a+b,0)/v.length;o[k]=m;o.sd[k]=Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/Math.max(1,v.length-1));}return o;});
+ const low=['cost','pots','deaths'];rows.sort((a,b)=>low.includes(sortKey)?a[sortKey]-b[sortKey]:b[sortKey]-a[sortKey]);
+ const best={};for(const[k]of COLS)best[k]=(low.includes(k)?Math.min:Math.max)(...rows.map(r=>r[k]));
+ $('res').innerHTML=`<table><tr><th>Cenário</th>${COLS.map(([k,n])=>`<th><button data-k="${k}">${n}${k===sortKey?' ▾':''}</button></th>`).join('')}</tr>${rows.map(r=>`<tr><td>${esc(r.name)}${r.stopped?` <span class="bad">parou em ${r.stopped}/${r.n}</span>`:''}</td>${COLS.map(([k])=>{const f=k==='deaths'?v=>v.toFixed(2):fmt;return `<td class="${rows.length>1&&r[k]===best[k]?'best':''}">${f(r[k])}<br><small>± ${f(r.sd[k])}</small></td>`}).join('')}</tr>`).join('')}</table>`;}
+$('res').onclick=e=>{const b=e.target.closest('[data-k]');if(b){sortKey=b.dataset.k;renderRes();}};
+$('runCmp').onclick=async()=>{const list=scen.length?scen:[{name:'Configuração atual',cfg:clone(cfg)}],hours=Math.min(48,Math.max(.1,+$('hours').value||1)),reps=Math.min(50,Math.max(1,Math.round(+$('reps').value||1)));
+ results=list.map(s=>({name:s.name,runs:[]}));const jobs=[];list.forEach((s,i)=>{for(let r=0;r<reps;r++)jobs.push({idx:i,cfg:s.cfg,seed:1000+r,hours});});
+ let n=0;$('runCmp').disabled=true;$('prog').textContent='Simulando…';const t0=performance.now();
+ await runJobs(jobs,(j,r,err)=>{if(r)results[j.idx].runs.push(r);$('prog').textContent=err?'Erro: '+err:`${++n} de ${jobs.length}`;renderRes();});
+ $('runCmp').disabled=false;$('prog').textContent=`${fmt(jobs.length*hours)} h simuladas em ${((performance.now()-t0)/1000).toFixed(1)} s`;};
+// formulários
+const get=p=>p.split('.').reduce((o,k)=>o[k],cfg);
+const set=(p,v)=>{const a=p.split('.'),k=a.pop();a.reduce((o,x)=>o[x],cfg)[k]=v;};
+const num=(p,l,k=1)=>`<label>${l}<input id="f-${p}" type="number" step="any" data-p="${p}" data-k="${k}" value="${+(get(p)*k).toFixed(4)}"></label>`;
+const txt=(p,l)=>`<label>${l}<input id="f-${p}" data-p="${p}" data-str="1" value="${esc(get(p))}"></label>`;
+const sel=(p,l,o)=>`<label>${l}<select id="f-${p}" data-p="${p}" data-str="1">${o.map(([v,n])=>`<option value="${v}" ${String(get(p)??'')===v?'selected':''}>${n}</option>`).join('')}</select></label>`;
+const chk=(p,l)=>`<label class="chk"><input id="f-${p}" type="checkbox" data-p="${p}" ${get(p)?'checked':''}>${l}</label>`;
+const types=[['','—'],...E.TYPES.map(t=>[t,t])];
+const card=(t,b,n='')=>`<section class="panel"><h2>${t}</h2>${n?`<p class="note">${n}</p>`:''}${b}</section>`,fl=a=>`<div class="fields">${a.join('')}</div>`;
+const ST=[['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SP.ATK'],['spd','SP.DEF'],['spe','SPD']];
+const moveTable=(p,wild)=>`<div class="scroll"><table><tr>${wild?'':'<th>Usa</th>'}<th>Nome</th><th>Tipo</th><th>Poder</th><th>Classe</th><th>Recarga</th><th></th></tr>${get(p).map((m,i)=>`<tr>${wild?'':`<td><input type="checkbox" data-p="${p}.${i}.on" ${m.on!==false?'checked':''}></td>`}<td><input class="w" data-p="${p}.${i}.name" data-str="1" value="${esc(m.name)}"></td><td><select data-p="${p}.${i}.type" data-str="1">${E.TYPES.map(t=>`<option ${t===m.type?'selected':''}>${t}</option>`).join('')}</select></td><td><input type="number" data-p="${p}.${i}.power" data-k="1" value="${m.power}"></td><td>${m.basic?'Básico':`<select data-p="${p}.${i}.cat" data-str="1"><option value="P" ${m.cat==='P'?'selected':''}>Físico</option><option value="S" ${m.cat==='S'?'selected':''}>Especial</option></select>`}</td><td>${m.basic?'2 s':E.moveCd(m.power).toFixed(1)+' s'}</td><td><button data-rm="${p}.${i}">×</button></td></tr>`).join('')}</table></div><button data-add="${p}">Adicionar golpe</button>`;
+function forms(){$('forms').innerHTML=[
+ card('Meu pokémon',fl([txt('pokemon.name','Nome'),sel('pokemon.types.0','Tipo 1',types),sel('pokemon.types.1','Tipo 2',types),num('pokemon.level','Nível'),num('pokemon.potency','Potência (1 a 5)'),num('pokemon.quality','Qualidade'),num('trainer.level','Nível do treinador')])+fl([chk('pokemon.shiny','Shiny'),chk('pokemon.legendary','Lendário')])),
+ card('Stats',`<div class="scroll"><table><tr><th>Stat</th><th>Base</th><th>IV</th><th>Atual</th></tr>${ST.map(([k,n])=>`<tr><td>${n}</td><td><input type="number" data-p="pokemon.base.${k}" data-k="1" value="${cfg.pokemon.base[k]}"></td><td><input type="number" data-p="pokemon.iv.${k}" data-k="1" value="${cfg.pokemon.iv[k]}"></td><td>${fmt(E.stats(cfg.pokemon)[k])}</td></tr>`).join('')}</table></div><p class="note">HP de combate: ${fmt(E.stats(cfg.pokemon).maxHp)}</p>`),
+ card('Meus golpes',moveTable('pokemon.moves'),'Poderes deduzidos das recargas na sua gravação (podem errar em cerca de 5 pontos). Confira na Pokédex, sobretudo a classe.'),
+ card('Hunt',fl([txt('hunt.species','Espécie'),num('hunt.level','Nível'),sel('hunt.types.0','Tipo 1',types),sel('hunt.types.1','Tipo 2',types),...ST.map(([k,n])=>num('hunt.base.'+k,'Base '+n)),num('hunt.xpPerKill','XP por abate (log)'),num('hunt.goldCurve','Ouro da curva'),num('hunt.lootBonus','Bônus de loot base')])+'<button id="goldAuto" style="margin-top:8px">Preencher ouro pelo nível</button>','Para outra hunt, troque estes campos. O XP por abate é o que aparece no seu log naquela hunt.'),
+ card('Golpes do selvagem',moveTable('hunt.moves',true),'Não aparecem na wiki. Ajuste conforme a Pokédex da espécie.'),
+ card('Poções e revives',fl([chk('items.autoPotion','Usar poções'),chk('items.unlimited','Estoque infinito'),chk('items.autoRevive','Usar revive'),chk('items.autoReturn','Voltar à hunt')])+fl([num('items.threshold','Poção abaixo de (% HP)',100),sel('items.reviveType','Revive',[['revive','Revive'],['max','Max Revive']]),num('items.reviveQty','Estoque de revive')])+`<div class="scroll"><table><tr><th>Poção</th><th>Preço</th><th>Marcada</th><th>Estoque</th></tr>${E.POTIONS.map(p=>`<tr><td>${p.n}</td><td>${fmt(p.price)}</td><td><input type="checkbox" data-p="items.potions.${p.id}.on" ${cfg.items.potions[p.id].on?'checked':''}></td><td><input type="number" data-p="items.potions.${p.id}.qty" data-k="1" value="${cfg.items.potions[p.id].qty}"></td></tr>`).join('')}</table></div>`,'As marcadas são gastas da mais barata para a mais cara.'),
+ card('Bônus',fl([num('bonus.xpMult','Multiplicador extra de XP'),num('bonus.trainerRatio','XP treinador ÷ pokémon'),num('bonus.loot','Multiplicador do loot'),num('bonus.bike','Bicicleta (+%)',100),num('bonus.deathLoss','XP perdido ao morrer (%)',100),sel('seasonal','Tipo do dia (2×)',types)]),'O XP por abate padrão (626.372) já inclui os bônus ativos na gravação, inclusive o evento de +150%. Sem o evento, e se ele apenas multiplica, use 0,4.'),
+ card('Mapa e ritmo',fl([num('hunt.waveSize','Selvagens por onda'),num('hunt.packs','Bandos'),num('hunt.minSpawnDist','Distância mínima do spawn'),num('hunt.aggro','Alcance de perseguição'),num('hunt.mapSeed','Semente do mapa'),num('hunt.mapW','Largura'),num('hunt.mapH','Altura'),num('hunt.mobStepMs','Passo selvagem (ms)'),num('sim.heroStepMs','Meu passo (ms)'),num('sim.waveDelayMs','Pausa entre ondas (ms)'),num('sim.attackGapMs','Intervalo meus golpes (ms)'),num('sim.wildGapMs','Intervalo golpes selvagem (ms)'),num('sim.potionCdMs','Intervalo entre poções (ms)'),num('sim.returnMs','Volta do Centro (ms)'),num('sim.wildHpMult','HP selvagem ×'),num('sim.wildDmgMult','Dano selvagem ×')])+chk('sim.aoe','TM AoE (11×11)'))
+].join('');}
+$('forms').addEventListener('change',e=>{const d=e.target.dataset;if(!d.p)return;let v;if(e.target.type==='checkbox')v=e.target.checked;else if(d.str)v=e.target.value;else{v=parseFloat(e.target.value);if(!isFinite(v)){forms();return;}v/=+d.k||1;
+  const min={'pokemon.level':1,'pokemon.potency':1,'pokemon.quality':.1,'hunt.level':1,'hunt.waveSize':1,'hunt.packs':1,'hunt.mapW':24,'hunt.mapH':20,'sim.heroStepMs':50,'hunt.mobStepMs':50,'trainer.level':1};if(d.p in min)v=Math.max(min[d.p],v);
+  if(['pokemon.level','pokemon.potency','trainer.level','hunt.level','hunt.waveSize','hunt.packs','hunt.mapW','hunt.mapH'].includes(d.p))v=Math.round(v);if(d.p==='pokemon.potency')v=Math.min(5,v);if(d.p==='hunt.mapW'||d.p==='hunt.mapH')v=Math.min(200,v);if(d.p==='hunt.waveSize')v=Math.min(60,v);}
+ set(d.p,v);dirty();setTimeout(forms,0);});
+$('forms').addEventListener('click',e=>{const d=e.target.dataset;if(d.add){get(d.add).push({name:'Novo golpe',type:'NORMAL',power:60,cat:'P',on:true});}else if(d.rm){const a=d.rm.split('.'),i=+a.pop();get(a.join('.')).splice(i,1);}else if(e.target.id==='goldAuto'){const g=E.goldFor(cfg.hunt.level);cfg.hunt.goldCurve=g.curve;cfg.hunt.lootBonus=g.loot;}else return;dirty();forms();});
+// ficha
+const PT={normal:'NORMAL',fire:'FIRE',water:'WATER',grass:'GRASS',electric:'ELECTRIC',ice:'ICE',fighting:'FIGHTING',poison:'POISON',ground:'GROUND',flying:'FLYING',psychic:'PSYCHIC',bug:'BUG',rock:'ROCK',ghost:'GHOST',dragon:'DRAGON',dark:'DARK',steel:'STEEL',fairy:'FAIRY'};
+function parseFicha(s){const p=clone(cfg.pokemon),g=r=>(s.match(r)||[])[1];const sp=s.match(/Espécie:\s*(.+?)\s*\(#\d+\)\s*[—-]\s*([A-Z /]+)/i),lv=g(/Nível:\s*([\d.,]+)/i),q=g(/Qualidade:\s*([\d]+[.,]\d+)/i),pot=g(/Potência:\s*P(\d)/i);
+ let n=0;for(const[k,l]of ST){const re=new RegExp('^\\|\\s*'+l.replace('.','\\.')+'\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\d+)\\s*\\|','mi'),m=s.match(re);if(m){p.base[k]=+m[1];p.iv[k]=+m[2];n++;}}
+ if(!sp||!lv||!q||!pot||n<6)return null;const changed=sp[1]!==p.name;p.name=sp[1];p.types=sp[2].split('/').map(x=>PT[x.trim().toLowerCase()]||'');if(!p.types[1])p.types[1]='';p.level=parseInt(lv.replace(/\D/g,''),10);p.quality=parseFloat(q.replace(',','.'));p.potency=+pot;
+ p.shiny=/Shiny:\s*sim/i.test(s);p.legendary=/(Lendário|Mítico):\s*sim/i.test(s);p.refine={};return{p,changed};}
+$('fichaBtn').onclick=()=>{const r=parseFicha($('ficha').value);if(!r){$('fichaMsg').textContent='Não reconheci a ficha. Cole o texto completo, com a tabela de stats.';return;}cfg.pokemon=r.p;dirty();forms();$('fichaMsg').textContent=`${r.p.name} importado. `+(r.changed?'A ficha não traz golpes: atualize a tabela Meus golpes.':'Golpes mantidos.');};
+$('exp').onclick=()=>{$('json').value=JSON.stringify(clone(cfg));$('json').select();navigator.clipboard?.writeText($('json').value).then(()=>$('jsonMsg').textContent='Copiado.',()=>$('jsonMsg').textContent='Selecionado: copie com Ctrl+C.');};
+$('imp').onclick=()=>{const old=cfg;try{cfg=merge(defaultConfig(),JSON.parse($('json').value));E.create(cfg,1).run(1000);forms();dirty();$('jsonMsg').textContent='Carregado.';}catch(e){cfg=old;$('jsonMsg').textContent='Texto inválido, nada foi alterado.';}};
+$('def').onclick=()=>{cfg=defaultConfig();forms();dirty();$('jsonMsg').textContent='Padrão restaurado.';};
+// calibrar
+$('calRun').onclick=async()=>{const runs=[];$('calRes').textContent='Simulando…';await runJobs([1,2,3,4].map(s=>({cfg:clone(cfg),seed:s,hours:1})),(j,r)=>r&&runs.push(r));
+ const avg=k=>runs.reduce((a,r)=>a+r[k],0)/runs.length;$('calRes').innerHTML='<table><tr><th>Medida</th><th>Simulador</th><th>Jogo</th><th>Diferença</th></tr>'+[['Abates/h','kills','gk'],['XP/h','xp','gx'],['Gold/h','gold','gg']].map(([n,k,i])=>{const s=avg(k),g=+$(i).value;return `<tr><td>${n}</td><td>${fmt(s)}</td><td>${g?fmt(g):'–'}</td><td>${g?((s/g-1)*100).toFixed(1)+'%':'–'}</td></tr>`}).join('')+'</table>';};
+function doImport(text){const r=E.importCampo(text);if(!r){$('campoMsg').textContent='Nenhuma mensagem "campo" válida encontrada.';return;}if(r.map.W*r.map.H>90000){$('campoMsg').textContent='Mapa grande demais: use mensagens de uma única hunt.';return;}
+ cfg.hunt.map=r.map;if(r.waveSize)cfg.hunt.waveSize=r.waveSize;cfg.hunt.mobStepMs=r.mobStepMs;const b=E.parseCampo(text)[0].mobs[0];if(b){if(b.n)cfg.hunt.species=b.n;if(b.nv)cfg.hunt.level=b.nv;}dirty();forms();
+ $('campoMsg').textContent=`${r.messages} mensagens (${Math.round(r.seconds)} s), ${r.mobs} selvagens. Onda: ${r.waveSize}, passo: ${r.mobStepMs} ms.`+(r.messages<50?' Poucas mensagens: o mapa ficará pequeno e pouco realista.':'');}
+$('campoBtn').onclick=()=>doImport($('campo').value);
+$('campoFile').onchange=async e=>{const f=e.target.files[0];if(f)doImport(await f.text());};
+$('mapDel').onclick=()=>{cfg.hunt.map=null;dirty();$('campoMsg').textContent='Mapa aproximado ativo.';};
+$('snip').value=`(()=>{const out=[];const d=Object.getOwnPropertyDescriptor(MessageEvent.prototype,'data');
+Object.defineProperty(MessageEvent.prototype,'data',{...d,get(){const v=d.get.call(this);
+if(typeof v==='string'&&v.includes('"campo"')&&v!==out[out.length-1])out.push(v);return v;}});
+setTimeout(()=>{Object.defineProperty(MessageEvent.prototype,'data',d);
+console.log(out.length+' mensagens');const a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([out.join('\\n')]));a.download='campo.txt';a.click();},180000);})();`;
+$('copySnip').onclick=()=>{$('snip').select();navigator.clipboard?.writeText($('snip').value).catch(()=>{});};
+$('src').innerHTML='<tr><th>Item</th><th style="text-align:left">Origem</th></tr>'+[['Stats, HP, dano, tipos, STAB','Wiki; stats conferem com a sua ficha'],['HP e IV do selvagem','Wiki; confere com os 6 HPs da sua mensagem'],['Recarga, Investida, intervalos','Wiki'],['Poções, revive, perda de XP, ouro','Wiki; 2.710 de ouro confere com o log'],['Multiplicador de loot 1,25','Deduzido do log'],['Poder dos 13 golpes','Deduzido das recargas no vídeo'],['Classe dos golpes','Estimativa: todos especiais'],['Golpes do Buizel','Inventados, com poder ajustado ao dano medido na barra de vida do vídeo (1 minuto)'],['Mapa, onda, bandos, perseguição','Estimativa até importar o socket'],['Passo 260 ms e 520 ms','Wiki e mensagem do socket'],['Pausa entre ondas, poção e volta do Centro','Estimativa'],['Fora da v1','Captura, drops, shiny, troca de equipe, Z-Move']].map(([a,b])=>`<tr><td>${a}</td><td style="text-align:left;white-space:normal">${b}</td></tr>`).join('');
+forms();renderScen();restart();show('live');requestAnimationFrame(frame);
+</script>
+
+</body></html>

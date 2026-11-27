@@ -1,0 +1,282 @@
+<title>Laboratório de Hunts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* layout: barra de abas; ao vivo = mapa grande com coluna de sessão; demais abas em blocos */
+:root{--bg:#eef1f7;--panel:#fff;--fg:#172038;--mut:#59647f;--line:#d3d9e8;--acc:#6b3fa8;--accfg:#fff;--good:#1f7a4a;--bad:#b3363f;--f:'Inter',system-ui,sans-serif;--d:'Space Grotesk','Inter',sans-serif;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1324;--panel:#171e35;--fg:#e8ebf6;--mut:#9aa4c2;--line:#2c3657;--acc:#a97be0;--accfg:#140c24;--good:#63d39a;--bad:#ff8088;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e1324;--panel:#171e35;--fg:#e8ebf6;--mut:#9aa4c2;--line:#2c3657;--acc:#a97be0;--accfg:#140c24;--good:#63d39a;--bad:#ff8088;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--f);padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:600 20px var(--d);margin:0}h2{font:600 15px var(--d);margin:0 0 8px}
+header,.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}header{justify-content:space-between;margin-bottom:12px}
+button,input,select,textarea{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;max-width:100%}
+button{cursor:pointer}button.on,button.pri{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+section.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.live{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px}
+@media(max-width:820px){.live{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;border-radius:10px;overflow:hidden;background:#0b1230}
+canvas{display:block;width:100%;height:min(62vh,560px)}
+.stats{display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-variant-numeric:tabular-nums}.stats span:nth-child(odd){color:var(--mut)}.stats span:nth-child(even){text-align:right;font-weight:600}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.log{font-size:12px;color:var(--mut);margin-top:8px;min-height:106px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px}
+@media(max-width:420px){.grid{grid-template-columns:minmax(0,1fr)}}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--mut);min-width:0}label input,label select{color:var(--fg);width:100%;box-sizing:border-box}
+label.chk{flex-direction:row;align-items:center;gap:6px}label.chk input{width:auto}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}
+th button{background:none;border:0;padding:0;font-weight:600}
+td input{width:70px}td input.w{width:130px}
+textarea{width:100%;box-sizing:border-box;font:12px ui-monospace,monospace;min-height:90px}
+.note{color:var(--mut);font-size:13px;margin:6px 0;max-width:75ch}
+.warn{border-left:3px solid var(--acc);padding:6px 10px;margin:0 0 12px}
+.best{color:var(--good);font-weight:700}.bad{color:var(--bad)}
+</style>
+<header><h1>Laboratório de Hunts <small id="ver" style="font:500 12px var(--f);color:var(--mut)">v__VERSION__</small></h1><nav class="row" id="tabs"></nav></header>
+<div class="note warn" id="warn">Cranidos usa o mapa completo gerado_pedra_11. Buizel usa o início e os spawns que você observou, ainda sem paredes. As outras hunts usam o mapa do Cranidos até você importar o delas.</div>
+
+<div id="v-live">
+ <div class="row" style="margin-bottom:8px">
+  <button id="play" class="pri">Pausar</button><span id="speeds" class="row"></span><button id="reset">Reiniciar</button><span id="clock" style="font-variant-numeric:tabular-nums"></span>
+ </div>
+ <div class="live">
+  <div class="col"><div class="stage"><canvas id="cv"></canvas></div><div class="log" id="log"></div></div>
+  <div class="col">
+   <section class="panel"><h2>Sessão</h2><div class="stats" id="stats"></div></section>
+   <section class="panel"><h2>Golpes</h2><div id="cds"></div></section>
+  </div>
+ </div>
+</div>
+
+<div id="v-cmp" hidden class="col">
+ <section class="panel"><h2>Cenários</h2>
+  <p class="note">Um cenário é uma foto de toda a configuração atual (pokémon, hunt, itens e bônus). Ajuste na aba Configurar, adicione, mude algo e adicione de novo.</p>
+  <div class="row"><input id="scName" placeholder="Nome do cenário"><button id="scAdd" class="pri">Adicionar configuração atual</button><button id="scPot">Criar um por tipo de poção</button></div>
+  <div id="scList" class="col" style="gap:6px;margin-top:10px"></div></section>
+ <section class="panel"><h2>Resultados por hora</h2>
+  <div class="row"><label>Horas simuladas<input type="number" id="hours" value="2" min="0.1" step="0.5"></label><label>Repetições<input type="number" id="reps" value="6" min="1"></label><button id="runCmp" class="pri">Simular todos</button><span id="prog" class="note"></span></div>
+  <div class="scroll" id="res" style="margin-top:10px"></div>
+  <p class="note">O ± é o desvio entre repetições. Se a diferença entre dois cenários for menor que ele, trate como empate. Os primeiros 90 s de cada repetição são descartados.</p></section>
+</div>
+
+<div id="v-cfg" hidden class="col">
+ <section class="panel"><h2>Importar ficha do pokémon</h2><textarea id="ficha" placeholder="Cole aqui a ficha em texto gerada pelo jogo"></textarea>
+  <div class="row" style="margin-top:6px"><button id="fichaBtn" class="pri">Importar ficha</button><span id="fichaMsg" class="note"></span></div></section>
+ <div class="grid" id="forms"></div>
+ <section class="panel"><h2>Salvar ou carregar configuração</h2><textarea id="json"></textarea>
+  <div class="row" style="margin-top:6px"><button id="exp">Mostrar e copiar atual</button><button id="imp">Carregar do texto</button><button id="def">Voltar ao padrão</button><span id="jsonMsg" class="note"></span></div></section>
+</div>
+
+<div id="v-cal" hidden class="col">
+ <section class="panel"><h2>Comparar com o jogo</h2>
+  <p class="note">No jogo, use Reset no painel Sessão, cace pelo menos 15 minutos e digite os valores por hora. Depois rode a comparação com a mesma configuração.</p>
+  <div class="fields"><label>Abates/h no jogo<input type="number" id="gk"></label><label>XP/h no jogo<input type="number" id="gx"></label><label>Gold/h no jogo<input type="number" id="gg"></label></div>
+  <div class="row" style="margin-top:8px"><button id="calRun" class="pri">Comparar</button></div><div class="scroll" id="calRes"></div></section>
+ <section class="panel"><h2>Importar XP e mapa do socket</h2>
+  <p class="note">Cole mensagens <code>campo</code> e <code>batalha</code>, uma por linha. Um abate informa o XP base da hunt. Com pelo menos 1 minuto de campo, o simulador também monta o mapa e ajusta onda e passo. Quanto mais minutos, mais completo.</p>
+  <textarea id="campo"></textarea>
+  <label style="margin-top:6px">Nome do mapa (use o mesmo nome em hunts que dividem o mapa)<input id="mapName" placeholder="Em branco: nome que vem na gravação"></label>
+  <div class="row" style="margin-top:6px"><button id="campoBtn" class="pri">Importar mensagens</button><label>Ou escolha o arquivo<input type="file" id="campoFile" accept=".txt,.json,.log"></label><button id="mapDel">Usar mapa padrão</button></div><p class="note" id="campoMsg"></p>
+  <h2 style="margin-top:14px">Mapa completo do jogo</h2>
+  <p class="note">Escolha juntos o arquivo do mapa (por exemplo, gerado_pedra_11-9afeb60c.json) e o collision.json. Ele troca o desenho parcial pelo completo e mantém os pontos de spawn vindos da gravação. Para hunts de outro mapa, importe antes a gravação dela.</p>
+  <label>Arquivos do mapa<input type="file" id="worldFile" accept=".json" multiple></label><p class="note" id="worldMsg"></p>
+  <h2 style="margin-top:14px">Como capturar uma hunt (5 minutos)</h2>
+  <p class="note">Fique fora da hunt (no Centro Pokémon), abra o console do navegador (F12), cole o código abaixo e só então entre na hunt. Assim a gravação pega a chegada da primeira onda. O código lê as mensagens recebidas, ignora as que citam chat, token, senha, e-mail ou sessão, anota os endereços dos arquivos que o jogo carregar e baixa campo.txt depois de 5 minutos. O arquivo pode conter dados da sua conta, como saldo e pokémon. Leia o código antes de colar.</p>
+  <textarea id="snip" readonly></textarea><button id="copySnip">Copiar código</button></section>
+ <section class="panel"><h2>O que vem da wiki e o que é estimativa</h2><div class="scroll"><table id="src"></table></div></section>
+ <section class="panel"><h2>Versões</h2><div id="log-ver" class="note"></div></section>
+</div>
+<script>
+const CHANGELOG=__CHANGELOG__;
+const DEX=__DEX__;
+__ENGINE__
+__CONFIG__
+const E=SimEngine();
+const $=id=>document.getElementById(id);
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const clone=o=>JSON.parse(JSON.stringify(o,(k,v)=>v===Infinity?null:v));
+function merge(d,s){if(s===undefined)return d;if(Array.isArray(d)||d===null||typeof d!=='object')return s;const o={...d};for(const k in s)o[k]=k in d?merge(d[k],s[k]):s[k];return o;}
+// configurações salvas antes das regras novas de movimento recebem o ritmo novo
+function upgrade(c){if(!c||c.version===defaultConfig().version)return c;const d=defaultConfig();if(!(c.version>=5)){if(c.hunt){for(const k of ['packs','minSpawnDist','aggro','wander','mobStepMs'])c.hunt[k]=d.hunt[k];if(c.hunt.map&&!c.hunt.map.fixed){c.hunt.map=null;c.hunt.mapName='';}}if(c.items){c.items.threshold=d.items.threshold;c.items.reviveType=d.items.reviveType;}c.sim=d.sim;}
+ if(c.hunt)Object.assign(c.hunt,SimEngine().huntDefaults(c.hunt.species||d.hunt.species));c.version=d.version;return c;}
+let cfg=merge(defaultConfig(),upgrade(store.get('cfg2'))||undefined),scen=(store.get('scen2')||[]).map(s=>({...s,cfg:upgrade(s.cfg)}));
+let maps=store.get('maps')||{};
+// o mapa padrão agora vem completo: descarta cópias parciais salvas antes
+{const n=E.genMap().name;if(maps[n]&&!maps[n].full){delete maps[n];store.set('maps',maps);}if(cfg.hunt.mapName===n&&cfg.hunt.map&&!cfg.hunt.map.full){cfg.hunt.map=null;cfg.hunt.mapName='';}}
+const fmt=n=>!isFinite(n)?'–':Math.abs(n)>=1e9?(n/1e9).toLocaleString('pt-BR',{maximumFractionDigits:3})+' bi':Math.abs(n)>=1e6?(n/1e6).toLocaleString('pt-BR',{maximumFractionDigits:2})+' mi':Math.round(n).toLocaleString('pt-BR');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function dirty(){store.set('cfg2',cfg);restart();}
+// XP base: Buizel e Cranidos de nível 1000 dão o mesmo valor; outras hunts desse nível usam ele
+const XPB=Object.assign({'Buizel|1000':144617,'Cranidos|1000':144617},store.get('xpb')||{});
+const xpFor=(n,L)=>XPB[n+'|'+L]||(L===1000?144617:0);
+const dexBy=n=>DEX.find(d=>d[1].toLowerCase()===String(n).trim().toLowerCase());
+const dexMoves=(d,wild)=>d[6].slice().sort((a,b)=>a[1]-b[1]).map(([name,power,cd,cat,type])=>({name,type,power,cd,cat,...(wild?{}:{on:true})}));
+const dexBase=d=>({hp:d[3][0],atk:d[3][1],def:d[3][2],spa:d[3][3],spd:d[3][4],spe:d[3][5]});
+function setMine(d){Object.assign(cfg.pokemon,{name:d[1],types:[d[2][0],d[2][1]||''],base:dexBase(d),legendary:!!d[5],moves:dexMoves(d),refine:{}});}
+const hmap=store.get('hmap')||{};
+function setHunt(d,level){const L=level||d[4]||cfg.hunt.level,g=E.goldFor(L);Object.assign(cfg.hunt,E.huntDefaults(d[1]),{species:d[1],level:L,types:[d[2][0],d[2][1]||''],base:dexBase(d),xpBase:xpFor(d[1],L),goldCurve:g.curve,lootBonus:g.loot,map:maps[hmap[d[1]]]?clone(maps[hmap[d[1]]]):null,mapName:hmap[d[1]]||'',
+ moves:[{name:'Investida',type:d[2][0],power:30,cat:'P',basic:true},...dexMoves(d,true)]});}
+// abas
+const TABS=[['live','Ao vivo'],['cmp','Comparar'],['cfg','Configurar'],['cal','Calibrar']];
+$('tabs').innerHTML=TABS.map(([k,n])=>`<button data-t="${k}">${n}</button>`).join('');
+function show(k){for(const[t]of TABS){$('v-'+t).hidden=t!==k;document.querySelector(`[data-t="${t}"]`).classList.toggle('on',t===k);}}
+$('tabs').onclick=e=>{const k=e.target.dataset.t;if(k)show(k);};
+// ao vivo
+let sim,speed=1,playing=true,seed=1,cam=null,acc=0,last=0,ui=0,hold=1000;
+function restart(){try{sim=E.create(cfg,seed);cam=null;acc=0;ui=0;hold=1000;}catch(e){$('log').textContent='Configuração inválida: '+e.message;}}
+$('speeds').innerHTML=[1,2,5,10,30,100,500].map(v=>`<button data-s="${v}" class="${v===1?'on':''}">${v}×</button>`).join('');
+$('speeds').onclick=e=>{if(!e.target.dataset.s)return;speed=+e.target.dataset.s;[...$('speeds').children].forEach(b=>b.classList.toggle('on',b===e.target));};
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pausar':'Continuar';};
+$('reset').onclick=()=>{seed++;restart();};
+const cv=$('cv'),cx=cv.getContext('2d');
+const TC={NORMAL:'#b9b9a8',FIRE:'#f08030',WATER:'#4aa3f0',GRASS:'#62c852',ELECTRIC:'#f5d130',ICE:'#8fe0e0',FIGHTING:'#d0453a',POISON:'#b05ac0',GROUND:'#d8b860',FLYING:'#a8a0f0',PSYCHIC:'#f06090',BUG:'#a8b820',ROCK:'#b8a038',GHOST:'#8068a8',DRAGON:'#7848f0',DARK:'#807060',STEEL:'#b8b8d0',FAIRY:'#f0a0c0'};
+function draw(){const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(!w)return;if(cv.width!==Math.round(w*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+ cx.setTransform(dpr,0,0,dpr,0,0);const T=w<500?20:28,m=sim.map,t=sim.t;
+ const pos=a=>{const d=a.anim||a.moveEnd-a.moveStart,k=d>0?Math.min(1,Math.max(0,(t-a.moveStart)/d)):1;const x0=a.from%m.W,y0=(a.from/m.W)|0,x1=a.cell%m.W,y1=(a.cell/m.W)|0;return[(x0+(x1-x0)*k+.5)*T,(y0+(y1-y0)*k+.5)*T];};
+ const hp=pos(sim.hero);if(!cam||speed>10)cam=hp.slice();else{cam[0]+=(hp[0]-cam[0])*.15;cam[1]+=(hp[1]-cam[1])*.15;}
+ const ox=Math.round(w/2-cam[0]),oy=Math.round(h/2-cam[1]);cx.fillStyle='#070b1d';cx.fillRect(0,0,w,h);cx.save();cx.translate(ox,oy);
+ for(let y=Math.max(0,Math.floor(-oy/T));y<Math.min(m.H,Math.ceil((h-oy)/T));y++)for(let x=Math.max(0,Math.floor(-ox/T));x<Math.min(m.W,Math.ceil((w-ox)/T));x++){
+  const k=y*m.W+x,n=(x*73856093^y*19349663)>>>0;if(m.g[k]){cx.fillStyle=(x+y)%2?'#16255a':'#182861';cx.fillRect(x*T,y*T,T,T);if(n%17===0){cx.fillStyle='#1f4a52';cx.fillRect(x*T+7,y*T+9,3,T-14);cx.fillRect(x*T+13,y*T+5,3,T-10);}}
+  else{cx.fillStyle=n%3?'#0d1331':'#101739';cx.fillRect(x*T,y*T,T,T);if(m.g[k+m.W]){cx.fillStyle='#2a3566';cx.fillRect(x*T,y*T+T-6,T,6);}}}
+ cx.textAlign='center';cx.font='600 11px Inter,system-ui,sans-serif';
+ {const x=(sim.start%m.W)*T,y=((sim.start/m.W)|0)*T;cx.strokeStyle='#f5d130';cx.lineWidth=2;cx.strokeRect(x+1,y+1,T-2,T-2);cx.fillStyle='#f5d130';
+  cx.fillText(`Início (${sim.start%m.W+(m.ox||0)}, ${((sim.start/m.W)|0)+(m.oy||0)})${sim.startKnown?'':' não confirmado'}`,x+T/2,y+T+13);}
+ for(const c of sim.corpses){const x=(c.cell%m.W+.5)*T,y=(((c.cell/m.W)|0)+.5)*T;cx.globalAlpha=.45;cx.fillStyle='#8a93b8';cx.beginPath();cx.ellipse(x,y+4,T*.35,T*.18,0,0,7);cx.fill();cx.globalAlpha=1;}
+ const unit=(p,col,r,name,frac,bold)=>{cx.fillStyle='#0006';cx.beginPath();cx.ellipse(p[0],p[1]+r*.7,r,r*.4,0,0,7);cx.fill();cx.fillStyle=col;cx.beginPath();cx.arc(p[0],p[1],r,0,7);cx.fill();cx.fillStyle='#0b1020';cx.fillText(name[0],p[0],p[1]+4);
+  cx.fillStyle=bold?'#fff':'#aeb6d6';cx.fillText(name,p[0],p[1]-r-10);cx.fillStyle='#000a';cx.fillRect(p[0]-18,p[1]-r-7,36,4);cx.fillStyle=frac>.5?'#4ee08a':frac>.2?'#f2c14e':'#ff6b6b';cx.fillRect(p[0]-18,p[1]-r-7,36*Math.max(0,frac),4);};
+ for(const o of sim.mobs){unit(pos(o),TC[cfg.hunt.types[0]]||'#ccc',T*.32,cfg.hunt.species+' Nv'+cfg.hunt.level,o.hp/o.maxHp,o.id===sim.hero.target);}
+ if(!sim.M.stopped&&!sim.hero.downUntil)unit(hp,TC[cfg.pokemon.types[0]]||'#ccc',T*.55,cfg.pokemon.name+' Nv'+sim.level,sim.hero.hp/sim.st.maxHp,true);
+ cx.font='700 13px Inter,system-ui,sans-serif';for(const f of sim.fx){const a=(t-f.t)/900;if(a>1||speed>10)continue;cx.globalAlpha=1-a;cx.fillStyle=f.mine?TC[f.type]:'#ff6b6b';cx.fillText('-'+fmt(f.d),(f.cell%m.W+.5)*T+(f.mine?14:-14),(((f.cell/m.W)|0)+.5)*T-a*22);cx.globalAlpha=1;}
+ cx.restore();
+ if(sim.M.stopped||sim.hero.downUntil){cx.fillStyle='#fff';cx.textAlign='center';cx.font='600 16px Inter,system-ui';cx.fillText(sim.M.stopped?'Hunt encerrada: sem revive ou poção':'No Centro Pokémon…',w/2,h/2);}}
+function panels(){const M=sim.M,h=sim.t/3600000,r=v=>h>0?fmt(v/h):'–',cost=M.potionCost+M.reviveCost+M.ballCost,tot=sim.t||1;
+ const s=sim.t/1000|0;$('clock').textContent=`${String(s/3600|0).padStart(2,'0')}:${String((s/60|0)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')} simulados`;
+ const kx=cfg.hunt.xpBase>0,rows=[['XP pokémon /h',kx?r(M.xp):'sem dado'],['XP treinador /h (líquido)',kx?r(M.txp-M.xpLost):'sem dado'],['Gold /h',r(M.gold)],['Custo de itens /h',r(cost)],['Bolas arremessadas',fmt(M.balls)],['Lucro /h',r(M.gold-cost)],['Abates /h',r(M.kills)],['Abates',fmt(M.kills)],['Gold total',fmt(M.gold)],['Poções gastas',fmt(E.POTIONS.reduce((n,p)=>n+(M.used[p.id]||0),0))],['Mortes',M.deaths],['XP perdido',fmt(M.xpLost)],['HP',fmt(sim.hero.hp)+' / '+fmt(sim.st.maxHp)],['Tempo andando',Math.round(M.walkMs/tot*100)+'%'],['Tempo em luta',Math.round(M.fightMs/tot*100)+'%'],['Esperando onda',Math.round(M.waitMs/tot*100)+'%']];
+ $('stats').innerHTML=rows.map(([a,b])=>`<span>${a}</span><span>${b}</span>`).join('');
+ $('log').innerHTML=sim.log.map(l=>`<div>${esc(l.s)}</div>`).join('');
+ $('cds').innerHTML=sim.moves.map(v=>{const k=Math.min(1,1-Math.max(0,v.ready-sim.t)/v.cd);return `<div style="display:grid;grid-template-columns:1fr 70px 34px;gap:6px;align-items:center;font-size:12px"><span>${esc(v.name)}</span><span style="height:6px;border-radius:3px;background:linear-gradient(90deg,${TC[v.type]} ${k*100}%,var(--line) 0)"></span><span style="text-align:right">${v.uses}</span></div>`}).join('');}
+function frame(now){const dt=Math.min(100,now-last||16);last=now;if(playing&&sim&&!$('v-live').hidden&&(hold-=dt)<0){acc+=dt*speed;const tk=cfg.sim.tickMs;const start=performance.now();while(acc>=tk){sim.tick();acc-=tk;if(performance.now()-start>30){acc=0;break;}}}
+ if(sim&&!$('v-live').hidden){draw();if(now-ui>200){ui=now;panels();}}requestAnimationFrame(frame);}
+// comparação
+function renderScen(){$('scList').innerHTML=scen.length?scen.map((s,i)=>`<div class="row"><strong>${esc(s.name)}</strong><span class="note">${esc(s.cfg.pokemon.name)} × ${esc(s.cfg.hunt.species)} ${s.cfg.hunt.level}</span><button data-l="${i}">Abrir</button><button data-d="${i}">Remover</button></div>`).join(''):'<p class="note">Nenhum cenário ainda. Sem cenários, a simulação usa a configuração atual.</p>';}
+$('scList').onclick=e=>{const d=e.target.dataset;if(d.d!==undefined){scen.splice(+d.d,1);store.set('scen2',scen);renderScen();}if(d.l!==undefined){cfg=merge(defaultConfig(),clone(scen[+d.l].cfg));forms();dirty();show('live');}};
+const autoName=c=>`${c.pokemon.name} × ${c.hunt.species} ${c.hunt.level}`;
+$('scAdd').onclick=()=>{scen.push({name:$('scName').value||autoName(cfg)+' #'+(scen.length+1),cfg:clone(cfg)});$('scName').value='';store.set('scen2',scen);renderScen();};
+$('scPot').onclick=()=>{for(const p of E.POTIONS){const c=clone(cfg);for(const q of E.POTIONS)c.items.potions[q.id].on=q.id===p.id;c.items.autoPotion=true;scen.push({name:autoName(c)+' · '+p.n,cfg:c});}store.set('scen2',scen);renderScen();};
+function runJobs(jobs,onDone){return new Promise(res=>{let next=0,done=0;const local=()=>{const step=()=>{if(next>=jobs.length)return;const j=jobs[next++];onDone(j,E.evaluate(j.cfg,j.seed,j.hours,90000));if(++done===jobs.length)res();else setTimeout(step,0);};setTimeout(step,20);};
+ let ws=[];try{const src=SimEngine.toString()+';const E=SimEngine();onmessage=e=>{const j=e.data;try{postMessage({i:j.i,r:E.evaluate(j.cfg,j.seed,j.hours,90000)})}catch(x){postMessage({i:j.i,err:x.message})}}';const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+  const n=Math.min(jobs.length,Math.max(1,(navigator.hardwareConcurrency||4)-1));let failed=false;
+  const feed=w=>{if(next>=jobs.length){w.terminate();return;}const i=next++;w.postMessage({...jobs[i],i});};
+  for(let k=0;k<n;k++){const w=new Worker(url);ws.push(w);w.onmessage=e=>{if(failed)return;onDone(jobs[e.data.i],e.data.r,e.data.err);if(++done===jobs.length){ws.forEach(x=>x.terminate());res();}else feed(w);};
+   w.onerror=ev=>{ev.preventDefault();if(failed)return;failed=true;ws.forEach(x=>x.terminate());next=done;local();};feed(w);}}catch(e){ws.forEach(x=>x.terminate());next=0;done=0;local();}});}
+const COLS=[['xp','XP poké/h'],['txpNet','XP trein./h'],['gold','Gold/h'],['cost','Itens/h'],['profit','Lucro/h'],['kills','Abates/h'],['pots','Poções/h'],['deaths','Mortes/h']];
+let results=[],sortKey='xp';
+function renderRes(){if(!results.length){$('res').innerHTML='';return;}const rows=results.filter(r=>r.runs.length).map(r=>{const o={name:r.name,noXp:r.noXp,sd:{},stopped:r.runs.filter(x=>x.stopped).length,n:r.runs.length};for(const[k]of COLS){const v=r.runs.map(x=>x[k]),m=v.reduce((a,b)=>a+b,0)/v.length;o[k]=m;o.sd[k]=Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/Math.max(1,v.length-1));}return o;});
+ const low=['cost','pots','deaths'];rows.sort((a,b)=>low.includes(sortKey)?a[sortKey]-b[sortKey]:b[sortKey]-a[sortKey]);
+ const best={};for(const[k]of COLS)best[k]=(low.includes(k)?Math.min:Math.max)(...rows.map(r=>r[k]));
+ $('res').innerHTML=`<table><tr><th>Cenário</th>${COLS.map(([k,n])=>`<th><button data-k="${k}">${n}${k===sortKey?' ▾':''}</button></th>`).join('')}</tr>${rows.map(r=>`<tr><td>${esc(r.name)}${r.stopped?` <span class="bad">parou em ${r.stopped}/${r.n}</span>`:''}</td>${COLS.map(([k])=>{const f=k==='deaths'?v=>v.toFixed(2):fmt;if(r.noXp&&(k==='xp'||k==='txpNet'))return '<td>sem dado</td>';return `<td class="${rows.length>1&&r[k]===best[k]?'best':''}">${f(r[k])}<br><small>± ${f(r.sd[k])}</small></td>`}).join('')}</tr>`).join('')}</table>`;}
+$('res').onclick=e=>{const b=e.target.closest('[data-k]');if(b){sortKey=b.dataset.k;renderRes();}};
+$('runCmp').onclick=async()=>{const list=scen.length?scen:[{name:'Configuração atual',cfg:clone(cfg)}],hours=Math.min(48,Math.max(.1,+$('hours').value||1)),reps=Math.min(50,Math.max(1,Math.round(+$('reps').value||1)));
+ results=list.map(s=>({name:s.name,noXp:!(s.cfg.hunt.xpBase>0),runs:[]}));const jobs=[];list.forEach((s,i)=>{for(let r=0;r<reps;r++)jobs.push({idx:i,cfg:s.cfg,seed:1000+r,hours});});
+ let n=0;$('runCmp').disabled=true;$('prog').textContent='Simulando…';const t0=performance.now();
+ await runJobs(jobs,(j,r,err)=>{if(r)results[j.idx].runs.push(r);$('prog').textContent=err?'Erro: '+err:`${++n} de ${jobs.length}`;renderRes();});
+ $('runCmp').disabled=false;$('prog').textContent=`${fmt(jobs.length*hours)} h simuladas em ${((performance.now()-t0)/1000).toFixed(1)} s`;};
+// formulários
+const get=p=>p.split('.').reduce((o,k)=>o[k],cfg);
+const set=(p,v)=>{const a=p.split('.'),k=a.pop();a.reduce((o,x)=>o[x],cfg)[k]=v;};
+const num=(p,l,k=1)=>`<label>${l}<input id="f-${p}" type="number" step="any" data-p="${p}" data-k="${k}" value="${+(get(p)*k).toFixed(4)}"></label>`;
+const txt=(p,l)=>`<label>${l}<input id="f-${p}" data-p="${p}" data-str="1" value="${esc(get(p))}"></label>`;
+const sel=(p,l,o)=>`<label>${l}<select id="f-${p}" data-p="${p}" data-str="1">${o.map(([v,n])=>`<option value="${v}" ${String(get(p)??'')===v?'selected':''}>${n}</option>`).join('')}</select></label>`;
+const chk=(p,l)=>`<label class="chk"><input id="f-${p}" type="checkbox" data-p="${p}" ${get(p)?'checked':''}>${l}</label>`;
+const types=[['','—'],...E.TYPES.map(t=>[t,t])];
+const card=(t,b,n='')=>`<section class="panel"><h2>${t}</h2>${n?`<p class="note">${n}</p>`:''}${b}</section>`,fl=a=>`<div class="fields">${a.join('')}</div>`;
+const ST=[['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SP.ATK'],['spd','SP.DEF'],['spe','SPD']];
+const moveTable=(p,wild)=>`<div class="scroll"><table><tr>${wild?'':'<th>Usa</th>'}<th>Nome</th><th>Tipo</th><th>Poder</th><th>Classe</th><th>Recarga</th><th></th></tr>${get(p).map((m,i)=>`<tr>${wild?'':`<td><input type="checkbox" data-p="${p}.${i}.on" ${m.on!==false?'checked':''}></td>`}<td><input class="w" data-p="${p}.${i}.name" data-str="1" value="${esc(m.name)}"></td><td><select data-p="${p}.${i}.type" data-str="1">${E.TYPES.map(t=>`<option ${t===m.type?'selected':''}>${t}</option>`).join('')}</select></td><td><input type="number" data-p="${p}.${i}.power" data-k="1" value="${m.power}"></td><td>${m.basic?'Básico':`<select data-p="${p}.${i}.cat" data-str="1"><option value="P" ${m.cat==='P'?'selected':''}>Físico</option><option value="S" ${m.cat==='S'?'selected':''}>Especial</option></select>`}</td><td>${m.basic?'2 s':(m.cd||E.moveCd(m.power)).toFixed(1)+' s'}</td><td><button data-rm="${p}.${i}">×</button></td></tr>`).join('')}</table></div><button data-add="${p}">Adicionar golpe</button>`;
+function forms(){$('forms').innerHTML=[
+ card('Meu pokémon',fl([`<label>Espécie (Pokédex)<input id="spMine" list="dexList" value="${esc(cfg.pokemon.name)}"></label>`,sel('pokemon.types.0','Tipo 1',types),sel('pokemon.types.1','Tipo 2',types),num('pokemon.level','Nível'),num('pokemon.potency','Potência (1 a 5)'),num('pokemon.quality','Qualidade'),num('trainer.level','Nível do treinador')])+fl([chk('pokemon.shiny','Shiny'),chk('pokemon.legendary','Lendário')])),
+ card('Stats',`<div class="scroll"><table><tr><th>Stat</th><th>Base</th><th>IV</th><th>Atual</th></tr>${ST.map(([k,n])=>`<tr><td>${n}</td><td><input type="number" data-p="pokemon.base.${k}" data-k="1" value="${cfg.pokemon.base[k]}"></td><td><input type="number" data-p="pokemon.iv.${k}" data-k="1" value="${cfg.pokemon.iv[k]}"></td><td>${fmt(E.stats(cfg.pokemon)[k])}</td></tr>`).join('')}</table></div><p class="note">HP de combate: ${fmt(E.stats(cfg.pokemon).maxHp)}</p>`),
+ card('Meus golpes',moveTable('pokemon.moves'),'Da Pokédex do jogo. Desmarque os que o seu pokémon não usa.'),
+ card('Hunt',fl([`<label>Espécie (Pokédex)<input id="spHunt" list="dexList" value="${esc(cfg.hunt.species)}"></label>`,num('hunt.level','Nível'),sel('hunt.types.0','Tipo 1',types),sel('hunt.types.1','Tipo 2',types),...ST.map(([k,n])=>num('hunt.base.'+k,'Base '+n)),num('hunt.xpBase','XP base por abate'),num('hunt.goldCurve','Ouro da curva'),num('hunt.lootBonus','Bônus de loot base')])+'<button id="goldAuto" style="margin-top:8px">Preencher ouro pelo nível</button>',(cfg.hunt.xpBase>0?'':'<strong class="bad">Falta o XP base desta hunt, então o XP aparece como "sem dado". </strong>')+'Escolher a espécie preenche tudo, no menor nível de hunt dela. O XP base não está na Pokédex: é o campo "xp" da mensagem de abate do socket (importe-a em Calibrar), ou o XP do log dividido por (1 + bônus).'),
+ card('Golpes do selvagem',moveTable('hunt.moves',true),'Da Pokédex do jogo.'),
+ card('Poções e revives',fl([chk('items.autoPotion','Usar poções'),chk('items.unlimited','Estoque infinito'),chk('items.autoRevive','Usar revive'),chk('items.autoReturn','Voltar à hunt')])+fl([sel('items.ballPrice','Bola em cada abate (custo)',[['0','Nenhuma'],['5','Poke Ball'],['20','Great Ball'],['50','Super Ball'],['130','Ultra Ball']]),num('items.threshold','Poção abaixo de (% HP)',100),sel('items.reviveType','Revive',[['revive','Revive'],['max','Max Revive']]),num('items.reviveQty','Estoque de revive')])+`<div class="scroll"><table><tr><th>Poção</th><th>Preço</th><th>Marcada</th><th>Estoque</th></tr>${E.POTIONS.map(p=>`<tr><td>${p.n}</td><td>${fmt(p.price)}</td><td><input type="checkbox" data-p="items.potions.${p.id}.on" ${cfg.items.potions[p.id].on?'checked':''}></td><td><input type="number" data-p="items.potions.${p.id}.qty" data-k="1" value="${cfg.items.potions[p.id].qty}"></td></tr>`).join('')}</table></div>`,'As marcadas são gastas da mais barata para a mais cara.'),
+ card('Bônus',fl([num('bonus.xpTrainerPct','Bônus XP treinador (%)'),num('bonus.xpPokemonPct','Bônus XP pokémon (%)'),num('bonus.loot','Multiplicador do loot'),num('bonus.bike','Bicicleta (+%)',100),num('bonus.deathLoss','XP perdido ao morrer (%)',100),sel('seasonal','Tipo do dia (2×)',types)]),'Use o percentual mostrado ao lado de XP no painel Sessão.'),
+ card('Mapa e ritmo',`<label>Mapa desta hunt<select id="mapSel"><option value="">${cfg.hunt.species==='Buizel'?'Padrão (Buizel, spawns observados, sem paredes)':'Padrão (pedra_11 completo)'}</option>${Object.keys(maps).map(n=>`<option ${n===cfg.hunt.mapName&&cfg.hunt.map?'selected':''}>${esc(n)}</option>`).join('')}${cfg.hunt.map&&!maps[cfg.hunt.mapName]?'<option value="*" selected>Importado</option>':''}</select></label>`+fl([num('hunt.waveSize','Spawns fixos por onda'),num('hunt.extraSpawns','Spawns extras (Prey)'),num('hunt.mobStepMs','Passo selvagem (ms)'),num('sim.heroStepMs','Meu passo (ms)'),num('sim.serverMs','Ciclo do servidor (ms)'),num('sim.waveDelayMs','Pausa entre ondas (ms)'),num('sim.attackGapMs','Intervalo meus golpes (ms)'),num('sim.wildGapMs','Intervalo golpes selvagem (ms)'),num('sim.potionCdMs','Intervalo entre poções (ms)'),num('sim.returnMs','Volta do Centro (ms)'),num('sim.wildHpMult','HP selvagem ×'),num('sim.wildDmgMult','Dano selvagem ×')])+chk('sim.aoe','TM AoE (11×11)'),'Cada ação acontece no ciclo seguinte do servidor: passo de 260 ms vira 500 ms e passo de 520 ms vira 750 ms. Os selvagens nascem nos pontos fixos do mapa. Os extras do Prey saem das posições já observadas ou, sem elas, a 2 ou 3 passos do ponto fixo mais próximo (use 0 sem Prey). Mapas importados em Calibrar aparecem na lista e servem para qualquer hunt.')
+].join('')+`<datalist id="dexList">${DEX.map(d=>`<option value="${esc(d[1])}">`).join('')}</datalist>`;}
+$('forms').addEventListener('change',e=>{const d=e.target.dataset,id=e.target.id;if(id==='mapSel'){const n=e.target.value;if(n!=='*'){cfg.hunt.map=n?clone(maps[n]):null;cfg.hunt.mapName=n;if(n)hmap[cfg.hunt.species]=n;else delete hmap[cfg.hunt.species];store.set('hmap',hmap);dirty();}setTimeout(forms,0);return;}if(id==='spMine'||id==='spHunt'){const x=dexBy(e.target.value);if(x){id==='spMine'?setMine(x):setHunt(x);dirty();}setTimeout(forms,0);return;}if(!d.p)return;let v;if(e.target.type==='checkbox')v=e.target.checked;else if(d.str)v=e.target.value;else{v=parseFloat(e.target.value);if(!isFinite(v)){forms();return;}v/=+d.k||1;
+  const min={'pokemon.level':1,'pokemon.potency':1,'pokemon.quality':.1,'hunt.level':1,'hunt.waveSize':1,'hunt.extraSpawns':0,'hunt.packs':1,'hunt.mapW':24,'hunt.mapH':20,'sim.heroStepMs':50,'hunt.mobStepMs':50,'trainer.level':1};if(d.p in min)v=Math.max(min[d.p],v);
+  if(['pokemon.level','pokemon.potency','trainer.level','hunt.level','hunt.waveSize','hunt.extraSpawns','hunt.packs','hunt.mapW','hunt.mapH'].includes(d.p))v=Math.round(v);if(d.p==='pokemon.potency')v=Math.min(5,v);if(d.p==='hunt.mapW'||d.p==='hunt.mapH')v=Math.min(200,v);if(d.p==='hunt.waveSize')v=Math.min(60,v);if(d.p==='hunt.extraSpawns')v=Math.min(30,v);}
+ if(d.p==='items.ballPrice')v=+v;set(d.p,v);if(/moves\.\d+\.power$/.test(d.p))delete get(d.p.slice(0,-6)).cd;if(d.p==='hunt.level'){const g=E.goldFor(v);Object.assign(cfg.hunt,{goldCurve:g.curve,lootBonus:g.loot,xpBase:xpFor(cfg.hunt.species,v)});}if(d.p==='hunt.xpBase'&&v>0){XPB[cfg.hunt.species+'|'+cfg.hunt.level]=v;store.set('xpb',XPB);}dirty();setTimeout(forms,0);});
+$('forms').addEventListener('click',e=>{const d=e.target.dataset;if(d.add){get(d.add).push({name:'Novo golpe',type:'NORMAL',power:60,cat:'P',on:true});}else if(d.rm){const a=d.rm.split('.'),i=+a.pop();get(a.join('.')).splice(i,1);}else if(e.target.id==='goldAuto'){const g=E.goldFor(cfg.hunt.level);cfg.hunt.goldCurve=g.curve;cfg.hunt.lootBonus=g.loot;}else return;dirty();forms();});
+// ficha
+const PT={normal:'NORMAL',fire:'FIRE',water:'WATER',grass:'GRASS',electric:'ELECTRIC',ice:'ICE',fighting:'FIGHTING',poison:'POISON',ground:'GROUND',flying:'FLYING',psychic:'PSYCHIC',bug:'BUG',rock:'ROCK',ghost:'GHOST',dragon:'DRAGON',dark:'DARK',steel:'STEEL',fairy:'FAIRY'};
+function parseFicha(s){const p=clone(cfg.pokemon),g=r=>(s.match(r)||[])[1];const sp=s.match(/Espécie:\s*(.+?)\s*\(#\d+\)\s*[—-]\s*([A-Z /]+)/i),lv=g(/Nível:\s*([\d.,]+)/i),q=g(/Qualidade:\s*([\d]+[.,]\d+)/i),pot=g(/Potência:\s*P(\d)/i);
+ let n=0;for(const[k,l]of ST){const re=new RegExp('^\\|\\s*'+l.replace('.','\\.')+'\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\d+)\\s*\\|','mi'),m=s.match(re);if(m){p.base[k]=+m[1];p.iv[k]=+m[2];n++;}}
+ if(!sp||!lv||!q||!pot||n<6)return null;const changed=sp[1]!==p.name;p.name=sp[1];p.types=sp[2].split('/').map(x=>PT[x.trim().toLowerCase()]||'');if(!p.types[1])p.types[1]='';p.level=parseInt(lv.replace(/\D/g,''),10);p.quality=parseFloat(q.replace(',','.'));p.potency=+pot;
+ p.shiny=/Shiny:\s*sim/i.test(s);p.legendary=/(Lendário|Mítico):\s*sim/i.test(s);p.refine={};return{p,changed,d:dexBy(sp[1])};}
+$('fichaBtn').onclick=()=>{const r=parseFicha($('ficha').value);if(!r){$('fichaMsg').textContent='Não reconheci a ficha. Cole o texto completo, com a tabela de stats.';return;}if(r.changed&&r.d){r.p.moves=dexMoves(r.d);}cfg.pokemon=r.p;dirty();forms();$('fichaMsg').textContent=`${r.p.name} importado. `+(!r.changed?'Golpes mantidos.':r.d?'Golpes carregados da Pokédex.':'Espécie fora da Pokédex: confira os golpes.');};
+$('exp').onclick=()=>{$('json').value=JSON.stringify(clone(cfg));$('json').select();navigator.clipboard?.writeText($('json').value).then(()=>$('jsonMsg').textContent='Copiado.',()=>$('jsonMsg').textContent='Selecionado: copie com Ctrl+C.');};
+$('imp').onclick=()=>{const old=cfg;try{cfg=merge(defaultConfig(),upgrade(JSON.parse($('json').value)));E.create(cfg,1).run(1000);forms();dirty();$('jsonMsg').textContent='Carregado.';}catch(e){cfg=old;$('jsonMsg').textContent='Texto inválido, nada foi alterado.';}};
+$('def').onclick=()=>{cfg=defaultConfig();forms();dirty();$('jsonMsg').textContent='Padrão restaurado.';};
+// calibrar
+$('calRun').onclick=async()=>{const runs=[];$('calRes').textContent='Simulando…';await runJobs([1,2,3,4].map(s=>({cfg:clone(cfg),seed:s,hours:1})),(j,r)=>r&&runs.push(r));
+ const avg=k=>runs.reduce((a,r)=>a+r[k],0)/runs.length;$('calRes').innerHTML='<table><tr><th>Medida</th><th>Simulador</th><th>Jogo</th><th>Diferença</th></tr>'+[['Abates/h','kills','gk'],['XP/h','xp','gx'],['Gold/h','gold','gg']].map(([n,k,i])=>{const s=avg(k),g=+$(i).value;return `<tr><td>${n}</td><td>${fmt(s)}</td><td>${g?fmt(g):'–'}</td><td>${g?((s/g-1)*100).toFixed(1)+'%':'–'}</td></tr>`}).join('')+'</table>';};
+function readKills(text){const out=[];for(const line of text.split('\n')){const i=line.indexOf('{'),j=line.lastIndexOf('}');if(i<0)continue;try{const m=JSON.parse(line.slice(i,j+1));if(m.t==='batalha')for(const e of m.ev)if(e.k==='morte'&&e.quem==='selvagem'&&e.xp>0)out.push(e);}catch(_){}}return out;}
+// lê da mensagem de estado o pokémon ativo, o bônus de XP e o limiar de poção
+function readState(text){const o={};for(const line of text.split('\n')){if(!line.includes('"estado"'))continue;try{const e=JSON.parse(line).estado;if(!e)continue;
+ if(e.pokemons&&e.activeId){o.pk=e.pokemons.find(p=>p.id===e.activeId);o.trainer=e.level;}if(e.bonusXp)o.bonus=e.bonusXp;if(e.automation)o.auto=e.automation;}catch(_){}}return o;}
+function applyState(o,out){const p=o.pk,d=p&&dexBy(p.nome);
+ if(p&&d&&p.ivs){const same=cfg.pokemon.name===d[1];if(!same)setMine(d);Object.assign(cfg.pokemon,{level:p.level,quality:p.quality,potency:p.potencia,shiny:!!p.shiny,iv:{hp:p.ivs.hp,atk:p.ivs.atk,def:p.ivs.def,spa:p.ivs.spAtk,spd:p.ivs.spDef,spe:p.ivs.speed}});
+  const f=p.refino||{};cfg.pokemon.refine={hp:f.hp||0,atk:f.atk||0,def:f.def||0,spa:f.spAtk||0,spd:f.spDef||0,spe:f.speed||0};out.push(`Pokémon ativo: ${d[1]} nível ${p.level}.`);}
+ if(o.trainer>0)cfg.trainer.level=o.trainer;
+ if(o.bonus&&o.bonus.pk>0){cfg.bonus.xpPokemonPct=+((o.bonus.pk-1)*100).toFixed(3);cfg.bonus.xpTrainerPct=+((o.bonus.tr-1)*100).toFixed(3);out.push(`Bônus de XP: +${cfg.bonus.xpPokemonPct}%.`);}
+ if(o.auto&&o.auto.hpLimiar>0){cfg.items.threshold=o.auto.hpLimiar;out.push(`Poção abaixo de ${Math.round(o.auto.hpLimiar*100)}% do HP.`);}}
+function doImport(text){const r=E.importCampo(text),kills=readKills(text),state=readState(text);if(!r&&!kills.length){$('campoMsg').textContent='Nenhuma mensagem "campo" ou "batalha" válida encontrada.';return;}
+ if(r&&r.tooBig){$('campoMsg').textContent='Mapa grande demais: use mensagens de uma única hunt.';return;}
+ const out=[],b=r&&r.first;
+ if(b){const d=dexBy(b.n);if(d&&(b.n!==cfg.hunt.species||b.nv!==cfg.hunt.level))setHunt(d,b.nv);}
+ applyState(state,out);
+ const k=kills.filter(e=>e.nome===cfg.hunt.species).pop();
+ if(k){cfg.hunt.xpBase=k.xp;XPB[cfg.hunt.species+'|'+cfg.hunt.level]=k.xp;store.set('xpb',XPB);out.push(`XP base de ${cfg.hunt.species} ${cfg.hunt.level}: ${fmt(k.xp)}.`);}
+ if(r){out.push(`${r.messages} mensagens de campo (${Math.round(r.seconds)} s), ${r.mobs} selvagens, ${r.fullWaves} ondas completas.`);cfg.hunt.mobStepMs=r.mobStepMs;
+  const name=$('mapName').value.trim()||r.map.name||cfg.hunt.species,old=maps[name];
+  const wave=()=>{if(r.waveSize&&r.fullWaves){cfg.hunt.waveSize=r.waveSize;if(r.extraSpawns!==null){cfg.hunt.extraSpawns=r.extraSpawns;out.push(`Onda: ${r.waveSize} pontos fixos + ${r.extraSpawns} extras.`);}else{cfg.hunt.extraSpawns=0;out.push('Com menos de 3 ondas completas não dá para separar os spawns extras.');}}};
+  if(name===E.genMap().name){delete maps[name];store.set('maps',maps);delete hmap[cfg.hunt.species];store.set('hmap',hmap);cfg.hunt.map=E.genMap(cfg.hunt.species).name===name?null:E.genMap();cfg.hunt.mapName='';wave();
+   out.push(`Esta hunt usa o mapa "${name}", que já vem completo no app.`);}
+  else if(old&&old.full){const same=old.box&&r.map.box&&String(old.box)===String(r.map.box);if(same&&r.map.spawns.length){old.spawns=r.map.spawns.filter(([x,y])=>old.g[y*old.W+x]);old.extras=(r.map.extras||[]).filter(([x,y])=>old.g[y*old.W+x]);old.fixed=old.spawns.length>0;if(r.map.start)old.start=r.map.start;}
+   store.set('maps',maps);hmap[cfg.hunt.species]=name;store.set('hmap',hmap);cfg.hunt.map=clone(old);cfg.hunt.mapName=name;wave();
+   out.push(`Mapa completo "${name}" mantido, com ${old.spawns.length} pontos de spawn.`);}
+  else if(r.seconds>=60){let m=r.map;m.name=name;
+   if(old&&old.ox!==undefined){const u=E.mergeMap(old,m);if(u.W*u.H<=90000){m=u;out.push('Captura somada ao mapa já salvo.');}else out.push('A captura não combina com o mapa salvo e o substituiu.');}
+   maps[name]=m;store.set('maps',maps);hmap[cfg.hunt.species]=name;store.set('hmap',hmap);cfg.hunt.map=clone(m);cfg.hunt.mapName=name;if(r.fullWaves)wave();else if(r.waveSize)cfg.hunt.waveSize=r.waveSize;
+   out.push(`Mapa "${name}" salvo: ${m.g.filter(Boolean).length} quadrados conhecidos, ${m.spawns.length} pontos de spawn, ${m.spawns.length?'':'nenhuma onda completa.'}`+(m.fixed?'':' Nenhuma onda nova apareceu na gravação: comece a gravar antes de entrar na hunt.'));}
+  if(r.fullWaves>=2&&r.waveDelayMs>0)cfg.sim.waveDelayMs=Math.round(r.waveDelayMs/250)*250;
+  if(r.seconds<60&&name!==E.genMap().name&&!(old&&old.full))out.push('Menos de 60 s: o mapa não foi substituído.');}
+ dirty();forms();$('campoMsg').textContent=out.join(' ');}
+$('worldFile').onchange=async e=>{const say=s=>$('worldMsg').textContent=s;let blocking=store.get('blocking');const worlds=[];
+ for(const f of e.target.files){try{const j=JSON.parse(await f.text());if(Array.isArray(j.blocking)){blocking=j.blocking;store.set('blocking',blocking);}else if(Array.isArray(j.tiles))worlds.push([f.name,j]);}catch(_){say(f.name+' não é um JSON válido.');return;}}
+ e.target.value='';if(!worlds.length){say(blocking?'collision.json guardado. Agora escolha o arquivo do mapa.':'Nenhum arquivo de mapa reconhecido.');return;}if(!blocking){say('Falta o collision.json: escolha os dois juntos.');return;}
+ const out=[];for(const[file,w]of worlds){const name=file.replace(/\.json$/i,'').replace(/( \(\d+\))$/,'').replace(/-[0-9a-f]{6,}$/,'');
+  const ref=maps[name]||(name===E.genMap().name?E.genMap():null),r=E.importWorld(w,blocking,ref);if(!r){out.push(`${file}: não consegui ler o mapa.`);continue;}
+  r.map.name=name;maps[name]=r.map;store.set('maps',maps);
+  if(cfg.hunt.mapName===name||(!cfg.hunt.map&&name===E.genMap().name)){cfg.hunt.map=clone(r.map);cfg.hunt.mapName=name;hmap[cfg.hunt.species]=name;store.set('hmap',hmap);}
+  out.push(`Mapa "${name}": ${r.map.W}×${r.map.H}, ${fmt(r.cells)} quadrados livres, ${r.map.spawns.length} pontos de spawn.`+(r.match===null?' Sem gravação deste mapa: as posições e os spawns não foram conferidos.':` ${Math.round(r.match*100)}% dos quadrados da gravação aparecem como livres.`+(r.match<.95?' O alinhamento parece errado: me envie os arquivos.':'')));
+  if(cfg.hunt.mapName!==name)out.push('Escolha o mapa em Configurar, na lista Mapa desta hunt.');}
+ dirty();forms();say(out.join(' '));};
+$('campoBtn').onclick=()=>doImport($('campo').value);
+$('campoFile').onchange=async e=>{const f=e.target.files[0];if(f)doImport(await f.text());};
+$('mapDel').onclick=()=>{cfg.hunt.map=null;cfg.hunt.mapName='';delete hmap[cfg.hunt.species];store.set('hmap',hmap);dirty();forms();$('campoMsg').textContent='Mapa padrão ativo.';};
+$('snip').value=`(()=>{const out=[],files=new Set();const note=l=>l.forEach(e=>{const n=e.name.split('?')[0];if(/gerado|mapa|maps|hunt|area|tile|json/i.test(n))files.add(n);});
+note(performance.getEntriesByType('resource'));const po=new PerformanceObserver(l=>note(l.getEntries()));po.observe({type:'resource'});
+const d=Object.getOwnPropertyDescriptor(MessageEvent.prototype,'data');
+Object.defineProperty(MessageEvent.prototype,'data',{...d,get(){const v=d.get.call(this);
+if(typeof v==='string'&&v.includes('"t":')&&!v.includes('"market"')&&!/chat|token|senha|password|email|session/i.test(v)&&v!==out[out.length-1])out.push(v);return v;}});
+console.log('Gravando por 5 minutos. Entre na hunt agora.');
+setTimeout(()=>{Object.defineProperty(MessageEvent.prototype,'data',d);po.disconnect();
+out.push(JSON.stringify({arquivos:[...files]}));
+console.log(out.length+' mensagens');const a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([out.join('\\n')]));a.download='campo.txt';a.click();},300000);})();`;
+$('copySnip').onclick=()=>{$('snip').select();navigator.clipboard?.writeText($('snip').value).catch(()=>{});};
+$('src').innerHTML='<tr><th>Item</th><th style="text-align:left">Origem</th></tr>'+[["Golpes, recargas, classes e stats-base", "Pokédex exportada do jogo"], ["Fórmulas de stats e dano", "Wiki; os golpes gravados ficam dentro da faixa prevista"], ["XP por abate", "144.617 de base no nível 1000 (Buizel e Cranidos), vezes o seu bônus"], ["Ouro", "Curva da wiki; 2.710 por abate confere no nível 1000"], ["Custo de bolas", "Ultra Ball (130) em cada abate"], ["Ciclo, passos e direções", "Gravação: 250 ms de ciclo, 750 ms por quadrado do selvagem, 500 ms do seu pokémon, sem diagonal"], ["Revide", "Gravação: só o selvagem atacado revida, a cada 1,4 s em média"], ["Ondas", "Cranidos (gravação): 9 pontos fixos, 2,75 s após a última morte. Buizel (sua análise de 15 ondas): 12 fixos e 2 extras do Prey"], ["Mapa do Buizel", "Início (67,11) e spawns observados; paredes desconhecidas, simulado como campo aberto"], ["Mapa padrão", "gerado_pedra_11 completo (arquivo do jogo e collision.json); 100% dos quadrados andados em duas gravações são livres"], ["Mapas das outras hunts", "Desconhecidos até você importar"], ["XP ao desmaiar", "Não se perde quando o revive levanta o pokémon; 10% do nível quando o time cai (wiki)"], ["Bicicleta", "Fração do passo pela wiki; não conferida em jogo"], ["Intervalo entre poções e volta do Centro", "Estimativa"], ["Ouro entre os níveis da tabela da wiki", "Interpolado"], ["Fora desta versão", "Captura, drops, shiny, troca de equipe, Z-Move"]].map(([a,b])=>`<tr><td style="white-space:normal">${a}</td><td style="text-align:left;white-space:normal">${b}</td></tr>`).join('');
+$('log-ver').innerHTML=CHANGELOG.map(v=>`<h3 style="font:600 13px var(--d);margin:10px 0 4px">v${esc(v.v)} · ${esc(v.d)}</h3><ul style="margin:0;padding-left:18px">${v.i.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`).join('');
+forms();renderScen();restart();show('live');requestAnimationFrame(frame);
+</script>
